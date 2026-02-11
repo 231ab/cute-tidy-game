@@ -6,11 +6,12 @@
   <meta name="description" content="星尘花园 - 治愈系闯关小游戏">
   <title>✨ 星尘花园 | 修复星光，治愈心灵</title>
   <style>
+    /* CSS 保持不变，原样式写得很好 */
     *{margin:0;padding:0;box-sizing:border-box}
     :root{--primary:#6c5ce7;--secondary:#00cec9;--accent:#fdcb6e;--bg-dark:#2d3436;--bg-light:#f7f9fc;--text-dark:#2d3436;--text-light:#f7f9fc;--success:#00b894;--danger:#d63031;--border-radius:12px;--shadow:0 4px 12px rgba(0,0,0,0.15);--transition:all 0.3s ease}
-    body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:var(--text-dark);height:100vh;overflow:hidden;touch-action:manipulation}
+    body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#6c5ce7,#a29bfe);color:var(--text-dark);height:100vh;overflow:hidden;touch-action:manipulation;user-select:none;}
     #game-container{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;justify-content:center;align-items:center;z-index:1}
-    canvas{max-width:100%;max-height:100vh;display:block}
+    canvas{max-width:100%;max-height:100vh;display:block;box-shadow: var(--shadow); border-radius: var(--border-radius);}
     #ui-container{position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;pointer-events:none}
     #ui-container *{pointer-events:auto}
     .hidden{display:none!important}
@@ -63,6 +64,7 @@
   </style>
 </head>
 <body>
+  <!-- DOM 元素结构保持不变 -->
   <div id="loading-screen">
     <div class="loading-content">
       <div class="loading-spinner"></div>
@@ -200,7 +202,6 @@
             version: '2.0'
           };
           localStorage.setItem(this.saveKey, JSON.stringify(saveData));
-          console.log('✅ 存档已保存');
           return true;
         } catch (e) {
           console.error('❌ 保存存档失败:', e);
@@ -209,26 +210,7 @@
       }
 
       deleteLocalSave() {
-        try {
-          localStorage.removeItem(this.saveKey);
-          console.log('🗑️ 存档已删除');
-          return true;
-        } catch (e) {
-          console.error('删除存档失败:', e);
-          return false;
-        }
-      }
-
-      load() {
-        return this.getLocalSave();
-      }
-
-      save(data) {
-        return this.saveLocal(data);
-      }
-
-      delete() {
-        this.deleteLocalSave();
+        localStorage.removeItem(this.saveKey);
       }
 
       formatDuration(seconds) {
@@ -262,38 +244,38 @@
       totalStars: 0,
       starsNeeded: 10,
       totalTime: 0,
-      startTime: Date.now(),
       sfxVolume: 1.0,
       musicVolume: 0.5,
       paused: false
     };
 
     let game;
-    let gameScene;
+    // 用于UI控制的引用
+    let activeScene = null;
 
-    // ==================== 内联精灵图 (Base64) ====================
-    // 使用 Canvas 生成简单但美观的精灵图
+    // ==================== 资源生成 ====================
     function generateSprites() {
       const canvas = document.createElement('canvas');
       canvas.width = 256;
       canvas.height = 64;
       const ctx = canvas.getContext('2d');
 
-      // 玩家角色 (紫色圆形带光晕)
+      // 玩家角色
       ctx.beginPath();
       ctx.arc(32, 32, 24, 0, Math.PI * 2);
       ctx.fillStyle = '#6c5ce7';
       ctx.fill();
-      
       ctx.beginPath();
       ctx.arc(32, 32, 16, 0, Math.PI * 2);
       ctx.fillStyle = '#a29bfe';
       ctx.fill();
 
-      // 星星 (黄色五角星)
+      // 星星 (修正绘制逻辑)
       ctx.save();
       ctx.translate(96, 32);
       ctx.beginPath();
+      // 移动到第一个点，避免路径问题
+      ctx.moveTo(0, -16);
       for (let i = 0; i < 5; i++) {
         const angle = (i * Math.PI * 2 / 5) - Math.PI / 2;
         const outerX = Math.cos(angle) * 16;
@@ -309,7 +291,7 @@
       ctx.fill();
       ctx.restore();
 
-      // 花朵1 (粉色)
+      // 花朵1
       ctx.beginPath();
       ctx.arc(160, 24, 10, 0, Math.PI * 2);
       ctx.fillStyle = '#FFB6C1';
@@ -321,7 +303,7 @@
       ctx.fillStyle = '#8B4513';
       ctx.fillRect(158, 40, 4, 12);
 
-      // 花朵2 (蓝色)
+      // 花朵2
       ctx.beginPath();
       ctx.arc(224, 24, 10, 0, Math.PI * 2);
       ctx.fillStyle = '#87CEFA';
@@ -338,57 +320,304 @@
 
     const SPRITE_SHEET = generateSprites();
 
-    // ==================== DOM 事件 ====================
-    document.addEventListener('DOMContentLoaded', () => {
-      // 隐藏加载屏
-      setTimeout(() => {
-        document.getElementById('loading-screen').style.opacity = '0';
-        setTimeout(() => {
-          document.getElementById('loading-screen').style.display = 'none';
-        }, 500);
-      }, 800);
-
-      // 检查存档
-      const saveData = saveSystem.load();
-      if (saveData) {
-        document.getElementById('continue-btn').classList.remove('hidden');
-        document.getElementById('load-info').classList.remove('hidden');
-        document.getElementById('save-level').textContent = saveData.level || 1;
-        document.getElementById('save-stars').textContent = saveData.totalStars || 0;
-        document.getElementById('save-time').textContent = saveSystem.formatDuration(saveData.totalTime || 0);
-        document.getElementById('save-date').textContent = saveSystem.formatSaveDate(saveData.savedAt);
+    // ==================== Phaser Scene Class (核心修复) ====================
+    class MainScene extends Phaser.Scene {
+      constructor() {
+        super('MainScene');
       }
 
-      // 按钮事件
+      preload() {
+        this.load.spritesheet('sprites', SPRITE_SHEET, {
+          frameWidth: 64,
+          frameHeight: 64
+        });
+
+        // 简易音效合成器
+        this.playStarSound = () => {
+          if (gameState.sfxVolume > 0) {
+            try {
+              const AudioContext = window.AudioContext || window.webkitAudioContext;
+              if (!AudioContext) return;
+              const audioCtx = new AudioContext();
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              gainNode.gain.setValueAtTime(gameState.sfxVolume * 0.2, audioCtx.currentTime);
+              gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+              oscillator.frequency.value = 800 + Math.random() * 200;
+              oscillator.type = 'sine';
+              oscillator.start();
+              oscillator.stop(audioCtx.currentTime + 0.1);
+            } catch(e) {}
+          }
+        };
+      }
+
+      create() {
+        activeScene = this; // 绑定到外部引用
+        gameState.starsCollected = 0; // 重置当前关卡收集
+        
+        // 1. 背景生成
+        const bgColors = [
+          0x87CEEB, 0xFFB6C1, 0x98D8C8, 0xFFD700, 0xDDA0DD,
+          0x87CEFA, 0xFFA07A, 0x90EE90, 0xF0E68C, 0xE6E6FA
+        ];
+        const color = bgColors[(gameState.level - 1) % bgColors.length] || 0x87CEEB;
+        this.add.rectangle(400, 300, 800, 600, color).setOrigin(0.5);
+
+        // 2. 动态云朵
+        for (let i = 0; i < 6; i++) {
+          const x = Phaser.Math.Between(50, 750);
+          const y = Phaser.Math.Between(50, 250);
+          const cloud = this.add.ellipse(x, y, Phaser.Math.Between(40, 90), 30, 0xFFFFFF, 0.6);
+          this.tweens.add({
+            targets: cloud,
+            x: x + Phaser.Math.Between(-100, 100),
+            duration: Phaser.Math.Between(20000, 40000),
+            yoyo: true,
+            repeat: -1
+          });
+        }
+
+        // 3. 地面
+        this.add.rectangle(400, 580, 800, 80, 0x7CFC00).setOrigin(0.5);
+
+        // 4. 花朵装饰
+        for (let i = 0; i < 12; i++) {
+          const x = Phaser.Math.Between(50, 750);
+          const y = Phaser.Math.Between(540, 560);
+          const frame = Phaser.Math.Between(2, 3);
+          const flower = this.add.sprite(x, y, 'sprites', frame).setScale(0.8);
+          this.tweens.add({
+            targets: flower,
+            angle: { from: -5, to: 5 },
+            duration: Phaser.Math.Between(2000, 3000),
+            yoyo: true,
+            repeat: -1
+          });
+        }
+
+        // 5. 玩家
+        this.player = this.physics.add.sprite(400, 350, 'sprites', 0).setScale(1.2);
+        this.player.setCollideWorldBounds(true);
+        this.player.body.allowGravity = false;
+        
+        // 玩家光晕
+        this.glow = this.add.circle(400, 350, 40, 0xFFFFFF, 0.2);
+        this.tweens.add({
+          targets: this.glow,
+          scale: 1.2,
+          alpha: 0.1,
+          duration: 1000,
+          yoyo: true,
+          repeat: -1
+        });
+
+        // 6. 交互
+        this.player.setInteractive({ draggable: true });
+        
+        this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+          if (gameState.paused) return;
+          gameObject.x = dragX;
+          gameObject.y = dragY;
+          this.glow.x = dragX;
+          this.glow.y = dragY;
+        });
+
+        this.input.on('pointerdown', (pointer) => {
+          if (gameState.paused) return;
+          // 简单的点击移动逻辑
+          this.tweens.add({
+            targets: [this.player, this.glow],
+            x: pointer.x,
+            y: pointer.y,
+            duration: 500,
+            ease: 'Power2'
+          });
+        });
+
+        // 7. 星星组
+        this.stars = this.physics.add.group();
+        this.createStars(gameState.starsNeeded);
+
+        // 8. 碰撞检测
+        this.physics.add.overlap(this.player, this.stars, this.collectStar, null, this);
+
+        // UI 初始化
+        this.updateUI();
+
+        // 计时器事件
+        this.timeEvent = this.time.addEvent({
+          delay: 1000,
+          callback: () => {
+            if (!gameState.paused) gameState.totalTime++;
+          },
+          loop: true
+        });
+      }
+
+      createStars(count) {
+        // 确保不会生成在已有的星星位置过于密集
+        for (let i = 0; i < count; i++) {
+          const x = Phaser.Math.Between(50, 750);
+          const y = Phaser.Math.Between(100, 500);
+          const star = this.stars.create(x, y, 'sprites', 1).setScale(0.8);
+          
+          this.tweens.add({
+            targets: star,
+            y: y + 15,
+            duration: Phaser.Math.Between(1500, 3000),
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+          });
+        }
+      }
+
+      collectStar(player, star) {
+        star.disableBody(true, true);
+        this.playStarSound();
+        
+        // 粒子特效
+        const particles = this.add.particles(star.x, star.y, 'sprites', {
+          frame: 1,
+          speed: 100,
+          scale: { start: 0.4, end: 0 },
+          blendMode: 'ADD',
+          lifespan: 500,
+          gravityY: 0,
+          quantity: 8
+        });
+        
+        // 自动销毁粒子系统
+        this.time.delayedCall(500, () => particles.destroy());
+
+        gameState.starsCollected++;
+        gameState.totalStars++;
+        this.updateUI();
+
+        if (gameState.starsCollected >= gameState.starsNeeded) {
+          this.levelComplete();
+        }
+      }
+
+      updateUI() {
+        const elStars = document.getElementById('stars-display');
+        const elLevel = document.getElementById('level-display');
+        if (elStars) elStars.innerText = `${gameState.starsCollected}/${gameState.starsNeeded}`;
+        if (elLevel) elLevel.innerText = gameState.level;
+      }
+
+      levelComplete() {
+        this.scene.pause();
+        gameState.paused = true;
+        
+        // 更新 UI
+        document.getElementById('level-complete').classList.remove('hidden');
+        document.getElementById('earned-stars').textContent = gameState.starsCollected;
+        document.getElementById('total-stars').textContent = gameState.totalStars;
+        
+        const percent = Math.min(100, gameState.level * 10);
+        document.getElementById('garden-percent').textContent = percent;
+        document.getElementById('progress-fill').style.width = percent + '%';
+
+        saveSystem.saveLocal({
+            level: gameState.level + 1, // 保存下一关状态
+            totalStars: gameState.totalStars,
+            totalTime: gameState.totalTime
+        });
+      }
+
+      togglePause() {
+        if (this.scene.isPaused('MainScene')) {
+          this.scene.resume('MainScene');
+          gameState.paused = false;
+        } else {
+          this.scene.pause('MainScene');
+          gameState.paused = true;
+        }
+      }
+    }
+
+    // ==================== DOM 事件处理 ====================
+    document.addEventListener('DOMContentLoaded', () => {
+      // 模拟加载
+      setTimeout(() => {
+        const loader = document.getElementById('loading-screen');
+        loader.style.opacity = '0';
+        setTimeout(() => loader.style.display = 'none', 500);
+      }, 800);
+
+      // 加载存档显示
+      checkSave();
+
+      // 按钮绑定
       document.getElementById('new-game-btn').addEventListener('click', startNewGame);
       document.getElementById('continue-btn').addEventListener('click', continueGame);
-      document.getElementById('delete-save-btn').addEventListener('click', () => {
-        if (confirm('⚠️ 确定要删除存档吗？此操作不可恢复！')) {
-          saveSystem.delete();
-          location.reload();
-        }
-      });
+      
       document.getElementById('pause-btn').addEventListener('click', () => {
-        if (gameScene) gameScene.togglePause();
+        if (activeScene) {
+            activeScene.togglePause();
+            document.getElementById('pause-menu').classList.remove('hidden');
+        }
       });
+
       document.getElementById('resume-btn').addEventListener('click', () => {
-        if (gameScene) gameScene.togglePause();
+        if (activeScene) activeScene.togglePause();
+        document.getElementById('pause-menu').classList.add('hidden');
       });
+
       document.getElementById('restart-btn').addEventListener('click', () => {
-        if (confirm('确定要重新开始当前区域吗？')) {
-          if (gameScene) {
-            gameState.starsCollected = 0;
-            gameScene.scene.restart();
-            hidePauseMenu();
-          }
-        }
+        document.getElementById('pause-menu').classList.add('hidden');
+        if (activeScene) activeScene.scene.restart();
+        gameState.paused = false;
       });
+
       document.getElementById('save-btn').addEventListener('click', () => {
-        if (gameScene) {
-          gameScene.saveGame();
-          alert('💾 进度已保存！');
+        saveSystem.saveLocal({
+          level: gameState.level,
+          totalStars: gameState.totalStars,
+          totalTime: gameState.totalTime
+        });
+        alert('💾 进度已保存');
+      });
+
+      document.getElementById('back-menu-btn').addEventListener('click', () => {
+        document.getElementById('pause-menu').classList.add('hidden');
+        document.getElementById('game-ui').classList.add('hidden');
+        document.getElementById('main-menu').classList.remove('hidden');
+        if (game) game.destroy(true);
+        checkSave();
+      });
+
+      document.getElementById('next-level-btn').addEventListener('click', () => {
+        document.getElementById('level-complete').classList.add('hidden');
+        gameState.level++;
+        if (gameState.level > 10) {
+            showGameComplete();
+        } else {
+            gameState.paused = false;
+            if (activeScene) activeScene.scene.restart();
         }
       });
+      
+      document.getElementById('back-menu-complete-btn').addEventListener('click', () => {
+        document.getElementById('level-complete').classList.add('hidden');
+        document.getElementById('game-ui').classList.add('hidden');
+        document.getElementById('main-menu').classList.remove('hidden');
+        if (game) game.destroy(true);
+        checkSave();
+      });
+
+      document.getElementById('delete-save-btn').addEventListener('click', () => {
+        if(confirm("确定要删除存档吗？")) {
+            saveSystem.deleteLocalSave();
+            checkSave();
+        }
+      });
+
+      // 设置菜单
       document.getElementById('settings-btn').addEventListener('click', () => {
         document.getElementById('pause-menu').classList.add('hidden');
         document.getElementById('settings-menu').classList.remove('hidden');
@@ -397,53 +626,53 @@
         document.getElementById('settings-menu').classList.add('hidden');
         document.getElementById('pause-menu').classList.remove('hidden');
       });
-      document.getElementById('back-menu-btn').addEventListener('click', () => {
-        if (confirm('确定要退出游戏吗？进度会自动保存')) {
-          if (gameScene) gameScene.saveGame();
-          showMainMenu();
-        }
-      });
-      document.getElementById('back-menu-complete-btn').addEventListener('click', showMainMenu);
-      document.getElementById('next-level-btn').addEventListener('click', () => {
-        document.getElementById('level-complete').classList.add('hidden');
-        gameState.level++;
-        startGame();
-      });
-      document.getElementById('play-again-btn').addEventListener('click', () => {
-        document.getElementById('game-complete').classList.add('hidden');
-        startNewGame();
-      });
-      document.getElementById('share-btn').addEventListener('click', () => {
-        const shareText = `我在「星尘花园」收集了${gameState.totalStars}颗星星，修复了整座花园！✨你也来试试吧~ ${window.location.href}`;
-        if (navigator.share) {
-          navigator.share({ title: '星尘花园', text: shareText });
-        } else {
-          navigator.clipboard.writeText(shareText).then(() => {
-            alert('🎮 成就已复制到剪贴板！\n' + shareText);
-          });
-        }
-      });
-
-      // 音量控制
-      document.getElementById('sfx-volume').addEventListener('input', (e) => {
-        gameState.sfxVolume = parseFloat(e.target.value);
-        if (gameScene?.starSound) gameScene.starSound.volume = gameState.sfxVolume;
-      });
-      document.getElementById('music-volume').addEventListener('input', (e) => {
-        gameState.musicVolume = parseFloat(e.target.value);
-        if (gameScene?.bgMusic) gameScene.bgMusic.volume = gameState.musicVolume;
-      });
+      
+      // 音量
+      document.getElementById('sfx-volume').addEventListener('input', (e) => gameState.sfxVolume = e.target.value);
     });
 
-    function showMainMenu() {
-      document.getElementById('main-menu').classList.remove('hidden');
-      document.getElementById('game-ui').classList.add('hidden');
-      if (game) game.scene.pause('main');
+    function checkSave() {
+      const save = saveSystem.getLocalSave();
+      const contBtn = document.getElementById('continue-btn');
+      const infoPanel = document.getElementById('load-info');
+      
+      if (save) {
+        contBtn.classList.remove('hidden');
+        infoPanel.classList.remove('hidden');
+        document.getElementById('save-level').innerText = save.level;
+        document.getElementById('save-stars').innerText = save.totalStars;
+        document.getElementById('save-time').innerText = saveSystem.formatDuration(save.totalTime);
+        document.getElementById('save-date').innerText = saveSystem.formatSaveDate(save.savedAt);
+      } else {
+        contBtn.classList.add('hidden');
+        infoPanel.classList.add('hidden');
+      }
     }
 
-    function hidePauseMenu() {
-      document.getElementById('pause-menu').classList.add('hidden');
-      document.getElementById('settings-menu').classList.add('hidden');
+    function initGame() {
+      document.getElementById('main-menu').classList.add('hidden');
+      document.getElementById('game-ui').classList.remove('hidden');
+
+      if (game) game.destroy(true);
+
+      const config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        parent: 'game-container',
+        backgroundColor: '#87CEEB',
+        physics: {
+          default: 'arcade',
+          arcade: { gravity: { y: 0 }, debug: false }
+        },
+        scale: {
+          mode: Phaser.Scale.FIT,
+          autoCenter: Phaser.Scale.CENTER_BOTH
+        },
+        scene: MainScene // 使用类
+      };
+
+      game = new Phaser.Game(config);
     }
 
     function startNewGame() {
@@ -453,383 +682,32 @@
         totalStars: 0,
         starsNeeded: 10,
         totalTime: 0,
-        startTime: Date.now(),
         sfxVolume: 1.0,
         musicVolume: 0.5,
         paused: false
       };
-      startGame();
+      initGame();
     }
 
     function continueGame() {
-      const saveData = saveSystem.load();
-      if (saveData) {
-        gameState = {
-          level: saveData.level || 1,
-          starsCollected: 0,
-          totalStars: saveData.totalStars || 0,
-          starsNeeded: 10,
-          totalTime: saveData.totalTime || 0,
-          startTime: Date.now(),
-          sfxVolume: saveData.sfxVolume || 1.0,
-          musicVolume: saveData.musicVolume || 0.5,
-          paused: false
-        };
-      }
-      startGame();
-    }
-
-    function startGame() {
-      document.getElementById('main-menu').classList.add('hidden');
-      document.getElementById('game-ui').classList.remove('hidden');
-      
-      if (game) game.destroy(true);
-      
-      game = new Phaser.Game({
-        width: 800,
-        height: 600,
-        backgroundColor: '#87CEEB',
-        scene: {
-          preload: preload,
-          create: create,
-          update: update
-        },
-        physics: {
-          default: 'arcade',
-          arcade: { gravity: { y: 0 }, debug: false }
-        },
-        scale: {
-          mode: Phaser.Scale.FIT,
-          autoCenter: Phaser.Scale.CENTER_BOTH
-        }
-      });
-    }
-
-    // ==================== Phaser 场景 ====================
-    function preload() {
-      this.load.spritesheet('sprites', SPRITE_SHEET, {
-        frameWidth: 64,
-        frameHeight: 64
-      });
-      
-      // 模拟音效（实际项目替换为真实音频文件）
-      this.starSound = {
-        play: () => {
-          if (gameState.sfxVolume > 0) {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            gainNode.gain.value = gameState.sfxVolume * 0.2;
-            oscillator.frequency.value = 800;
-            oscillator.type = 'sine';
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.1);
-          }
-        },
-        volume: gameState.sfxVolume
-      };
-      
-      this.bgMusic = { volume: gameState.musicVolume };
-    }
-
-    function create() {
-      gameScene = this;
-      window.gameScene = this;
-      
-      // 背景 - 根据关卡变化
-      const bgColors = [
-        '#87CEEB', // 1: 天空蓝
-        '#FFB6C1', // 2: 粉红
-        '#98D8C8', // 3: 薄荷绿
-        '#FFD700', // 4: 金色
-        '#DDA0DD', // 5: 梅子紫
-        '#87CEFA', // 6: 浅蓝
-        '#FFA07A', // 7: 浅橙
-        '#90EE90', // 8: 浅绿
-        '#F0E68C', // 9: 卡其
-        '#E6E6FA'  // 10: 薰衣草紫
-      ];
-      
-      const bgColor = Phaser.Display.Color.ValueToColor(bgColors[(gameState.level - 1) % bgColors.length]);
-      this.add.rectangle(400, 300, 800, 600, bgColor.color, 0.9).setOrigin(0.5);
-      
-      // 云朵/装饰（根据关卡变化）
-      for (let i = 0; i < 8; i++) {
-        const x = Phaser.Math.Between(50, 750);
-        const y = Phaser.Math.Between(80, 250);
-        const size = Phaser.Math.Between(30, 80);
-        const color = gameState.level <= 3 ? 0xFFFFFF : 
-                      gameState.level <= 6 ? 0xFFE4E1 : 0xE6E6FA;
-        
-        const cloud = this.add.ellipse(x, y, size, size * 0.6, color, 0.7);
-        
-        this.tweens.add({
-          targets: cloud,
-          x: x + Phaser.Math.Between(100, 300),
-          duration: Phaser.Math.Between(25000, 45000),
-          repeat: -1,
-          yoyo: true,
-          ease: 'Sine.easeInOut'
-        });
-      }
-      
-      // 草地
-      this.add.rectangle(400, 580, 800, 120, 0x7CFC00, 0.9).setOrigin(0.5);
-      
-      // 花朵装饰
-      const flowerTypes = gameState.level <= 5 ? [2, 3] : [3, 2]; // 切换花朵帧
-      for (let i = 0; i < 15; i++) {
-        const x = Phaser.Math.Between(80, 720);
-        const y = Phaser.Math.Between(480, 560);
-        const scale = Phaser.Math.FloatBetween(0.7, 1.2);
-        const frame = Phaser.Utils.Array.GetRandom(flowerTypes);
-        
-        const flower = this.add.sprite(x, y, 'sprites', frame)
-          .setScale(scale)
-          .setDepth(5);
-        
-        // 轻微摇摆
-        this.tweens.add({
-          targets: flower,
-          angle: Phaser.Math.Between(-5, 5),
-          duration: Phaser.Math.Between(2000, 4000),
-          repeat: -1,
-          yoyo: true,
-          ease: 'Sine.easeInOut'
-        });
-      }
-      
-      // 玩家角色
-      this.player = this.add.sprite(400, 350, 'sprites', 0)
-        .setScale(1.2)
-        .setDepth(10);
-      
-      // 玩家光晕
-      const glow = this.add.circle(400, 350, 40, 0xffffff, 0.2)
-        .setDepth(9);
-      
-      this.tweens.add({
-        targets: glow,
-        alpha: { from: 0.3, to: 0.1 },
-        duration: 1200,
-        repeat: -1,
-        yoyo: true
-      });
-      
-      // 拖拽控制
-      this.input.setDraggable(this.player);
-      this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
-        gameObject.x = Phaser.Math.Clamp(dragX, 60, 740);
-        gameObject.y = Phaser.Math.Clamp(dragY, 120, 500);
-        glow.x = gameObject.x;
-        glow.y = gameObject.y;
-      });
-      
-      // 点击移动
-      this.input.on('pointerdown', (pointer) => {
-        if (!Phaser.Geom.Circle.Contains(new Phaser.Geom.Circle(this.player.x, this.player.y, 40), pointer.x, pointer.y)) {
-          this.tweens.add({
-            targets: [this.player, glow],
-            x: Phaser.Math.Clamp(pointer.x, 60, 740),
-            y: Phaser.Math.Clamp(pointer.y, 120, 500),
-            duration: 350,
-            ease: 'Power2'
-          });
-        }
-      });
-      
-      // 星星组
-      this.stars = this.physics.add.group();
-      this.createStars(gameState.starsNeeded);
-      
-      // 碰撞检测
-      this.physics.add.overlap(this.player, this.stars, this.collectStar, null, this);
-      
-      // 蝴蝶装饰
-      for (let i = 0; i < 6; i++) {
-        const butterfly = this.add.sprite(
-          Phaser.Math.Between(100, 700),
-          Phaser.Math.Between(150, 400),
-          'sprites',
-          1
-        ).setScale(0.8).setDepth(7);
-        
-        this.tweens.add({
-          targets: butterfly,
-          x: butterfly.x + Phaser.Math.Between(-150, 150),
-          y: butterfly.y + Phaser.Math.Between(-80, 80),
-          duration: Phaser.Math.Between(3000, 6000),
-          repeat: -1,
-          yoyo: true,
-          ease: 'Sine.easeInOut'
-        });
-        
-        // 旋转
-        this.tweens.add({
-          targets: butterfly,
-          angle: 360,
-          duration: 2000,
-          repeat: -1
-        });
-      }
-      
-      // UI 更新
-      this.updateUI();
-      
-      // 计时器
-      this.time.addEvent({
-        delay: 1000,
-        callback: () => {
-          if (!gameState.paused) {
-            gameState.totalTime++;
-          }
-        },
-        loop: true
-      });
-      
-      // 检查是否已完成所有关卡
-      if (gameState.level > 10) {
-        this.gameComplete();
+      const save = saveSystem.getLocalSave();
+      if (save) {
+        gameState.level = save.level;
+        gameState.totalStars = save.totalStars;
+        gameState.totalTime = save.totalTime;
+        gameState.paused = false;
+        initGame();
       }
     }
 
-    create.prototype.createStars = function(count) {
-      this.stars.clear(true, true);
-      
-      for (let i = 0; i < count; i++) {
-        const star = this.stars.create(
-          Phaser.Math.Between(100, 700),
-          Phaser.Math.Between(150, 450),
-          'sprites',
-          1
-        ).setScale(0.9).setDepth(8);
-        
-        // 闪烁
-        this.tweens.add({
-          targets: star,
-          alpha: { from: 1, to: 0.6 },
-          duration: 900,
-          repeat: -1,
-          yoyo: true
-        });
-        
-        // 漂浮
-        this.tweens.add({
-          targets: star,
-          y: star.y + Phaser.Math.Between(-25, 25),
-          duration: Phaser.Math.Between(2500, 4500),
-          repeat: -1,
-          yoyo: true,
-          ease: 'Sine.easeInOut'
-        });
-      }
-    };
-
-    create.prototype.collectStar = function(player, star) {
-      star.disableBody(true, true);
-      
-      // 音效
-      this.starSound.play();
-      
-      // 粒子效果
-      const particles = this.add.particles(0xFFD700);
-      const emitter = particles.createEmitter({
-        speed: { min: 100, max: 200 },
-        scale: { start: 0.4, end: 0 },
-        quantity: 12,
-        lifespan: 600,
-        blendMode: 'ADD',
-        gravityY: 0
-      });
-      emitter.explode(15, star.x, star.y);
-      this.time.delayedCall(700, () => particles.destroy());
-      
-      // 计分
-      gameState.starsCollected++;
-      gameState.totalStars++;
-      this.updateUI();
-      
-      // 检查完成
-      if (gameState.starsCollected >= gameState.starsNeeded) {
-        this.levelComplete();
-      }
-    };
-
-    create.prototype.updateUI = function() {
-      document.getElementById('stars-display').textContent = 
-        `${gameState.starsCollected}/${gameState.starsNeeded}`;
-      document.getElementById('level-display').textContent = gameState.level;
-    };
-
-    create.prototype.levelComplete = function() {
-      document.getElementById('level-complete').classList.remove('hidden');
-      document.getElementById('earned-stars').textContent = gameState.starsCollected;
-      document.getElementById('total-stars').textContent = gameState.totalStars;
-      
-      const progress = Math.min(100, Math.round((gameState.level / 10) * 100));
-      document.getElementById('garden-percent').textContent = progress;
-      document.getElementById('progress-fill').style.width = `${progress}%`;
-      
-      gameState.paused = true;
-      this.scene.pause();
-      
-      // 自动保存
-      this.saveGame();
-    };
-
-    create.prototype.gameComplete = function() {
-      document.getElementById('game-complete').classList.remove('hidden');
-      document.getElementById('final-stars').textContent = gameState.totalStars;
-      document.getElementById('final-time').textContent = saveSystem.formatDuration(gameState.totalTime);
-      document.getElementById('complete-date').textContent = new Date().toLocaleDateString('zh-CN');
-      
-      gameState.paused = true;
-      this.scene.pause();
-      
-      // 保存最终进度
-      this.saveGame();
-    };
-
-    create.prototype.saveGame = function() {
-      const saveData = {
-        level: gameState.level,
-        totalStars: gameState.totalStars,
-        totalTime: gameState.totalTime,
-        sfxVolume: gameState.sfxVolume,
-        musicVolume: gameState.musicVolume
-      };
-      
-      saveSystem.save(saveData);
-      
-      // 更新菜单显示（如果返回主菜单）
-      if (document.getElementById('main-menu').classList.contains('hidden') === false) {
-        document.getElementById('save-level').textContent = saveData.level;
-        document.getElementById('save-stars').textContent = saveData.totalStars;
-        document.getElementById('save-time').textContent = saveSystem.formatDuration(saveData.totalTime);
-        document.getElementById('save-date').textContent = saveSystem.formatSaveDate(new Date().toISOString());
-        document.getElementById('continue-btn').classList.remove('hidden');
-        document.getElementById('load-info').classList.remove('hidden');
-      }
-    };
-
-    create.prototype.togglePause = function() {
-      gameState.paused = !gameState.paused;
-      
-      if (gameState.paused) {
-        this.scene.pause();
-        document.getElementById('pause-menu').classList.remove('hidden');
-      } else {
-        this.scene.resume();
-        document.getElementById('pause-menu').classList.add('hidden');
-        document.getElementById('settings-menu').classList.add('hidden');
-      }
-    };
-
-    function update() {
-      // 空实现（可根据需要添加逻辑）
+    function showGameComplete() {
+        document.getElementById('game-complete').classList.remove('hidden');
+        document.getElementById('final-stars').textContent = gameState.totalStars;
+        document.getElementById('final-time').textContent = saveSystem.formatDuration(gameState.totalTime);
+        document.getElementById('complete-date').textContent = new Date().toLocaleDateString();
+        if (game) game.destroy(true);
     }
+
   </script>
 </body>
 </html>
