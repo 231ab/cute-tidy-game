@@ -10,116 +10,176 @@ export class GameScene extends Phaser.Scene {
 
         const { width, height } = this.scale;
 
-        // ========= 安全存档 =========
+        // ===== 读取存档 =====
         let save = JSON.parse(localStorage.getItem("cuteSave"));
+
         if (!save) {
-            save = { currentLevel: 1 };
+            save = {
+                currentLevel: 1
+            };
             localStorage.setItem("cuteSave", JSON.stringify(save));
         }
 
         let currentLevel = save.currentLevel;
-        if (currentLevel > levels.length) currentLevel = 1;
+
+        // 防止超出关卡范围
+        if (currentLevel > levels.length) {
+            currentLevel = 1;
+            save.currentLevel = 1;
+            localStorage.setItem("cuteSave", JSON.stringify(save));
+        }
 
         let config = levels[currentLevel - 1];
+
+        // 再次安全判断
+        if (!config) {
+            console.warn("关卡不存在，重置");
+            this.scene.restart();
+            return;
+        }
+
+        let itemCount = config.itemCount;
+        let timeLimit = config.timeLimit;
 
         let placed = 0;
         let startTime = Date.now();
 
-        // ========= 背景 =========
-        this.add.rectangle(width/2, height/2, width, height, 0xFFF0F5);
+        // ===== 标题 =====
+        this.add.text(width/2, 40, "第 " + currentLevel + " 关", {
+            fontSize: "24px",
+            color: "#FF69B4"
+        }).setOrigin(0.5);
 
-        // ========= 规则提示 =========
+        // ===== 规则显示 =====
         let ruleText = "";
 
         if (config.ruleType === "color") {
-            ruleText = "🎨 整理所有 " + config.ruleValue + " 颜色物品";
+            ruleText = "请整理颜色为：" + config.ruleValue;
         } else {
-            ruleText = "🧺 整理所有 " + config.ruleValue + " 类型物品";
+            ruleText = "请整理类型为：" + config.ruleValue;
         }
 
         this.add.text(width/2, 80, ruleText, {
-            fontSize: "22px",
-            color: "#FF69B4",
-            align: "center",
-            wordWrap: { width: width - 40 }
+            fontSize: "18px",
+            color: "#FF1493"
         }).setOrigin(0.5);
 
-        // ========= 目标区域 =========
-        let target = this.add.rectangle(width/2, height - 160, 280, 130, 0xFFB6C1);
+        // ===== 计时器 =====
+        let timerText = this.add.text(width - 20, 40, "", {
+            fontSize: "18px",
+            color: "#FF1493"
+        }).setOrigin(1, 0.5);
+
+        // ===== 整理区域 =====
+        let target = this.add.rectangle(width/2, height - 150, 260, 120, 0xFFD1DC);
         target.setStrokeStyle(4, 0xFF69B4);
 
-        // ========= 物品库 =========
-        const ITEM_POOL = [
-            { type: "cosmetic", color: "pink" },
-            { type: "cosmetic", color: "blue" },
-            { type: "toy", color: "brown" },
-            { type: "food", color: "pink" },
-            { type: "study", color: "blue" },
-            { type: "clothes", color: "pink" }
-        ];
+        this.add.text(width/2, height - 150, "整理盒", {
+            fontSize: "20px",
+            color: "#ffffff"
+        }).setOrigin(0.5);
 
-        // ========= 创建物品 =========
-        for (let i = 0; i < config.itemCount; i++) {
+        // ===== 创建物品 =====
+        let items = [];
 
-            let data = Phaser.Utils.Array.GetRandom(ITEM_POOL);
+        const types = ["toy", "food", "clothes"];
+        const colors = ["pink", "blue", "yellow"];
 
-            let x = Phaser.Math.Between(60, width - 60);
-            let y = Phaser.Math.Between(150, height - 320);
+        for (let i = 0; i < itemCount; i++) {
 
-            let item = this.add.rectangle(x, y, 60, 60, 0xffffff);
-            item.setStrokeStyle(3, 0xFF69B4);
+            let x = Phaser.Math.Between(80, width - 80);
+            let y = Phaser.Math.Between(150, height - 300);
 
-            // 根据颜色设置填充
-            if (data.color === "pink") item.fillColor = 0xFFC0CB;
-            if (data.color === "blue") item.fillColor = 0x87CEFA;
-            if (data.color === "brown") item.fillColor = 0xDEB887;
+            let type = types[Phaser.Math.Between(0, 2)];
+            let color = colors[Phaser.Math.Between(0, 2)];
 
-            item.type = data.type;
-            item.colorTag = data.color;
+            let item = this.createCuteItem(x, y, type, color);
 
-            item.setInteractive({ draggable: true });
-            this.input.setDraggable(item);
+            item.itemType = type;
+            item.itemColor = color;
+
+            items.push(item);
         }
 
-        // ========= 拖动 =========
-        this.input.on("drag", (pointer, obj, dragX, dragY) => {
-            obj.x = dragX;
-            obj.y = dragY;
+        // ===== 拖动 =====
+        this.input.on("drag", (pointer, gameObject, dragX, dragY) => {
+            gameObject.x = dragX;
+            gameObject.y = dragY;
         });
 
-        this.input.on("dragend", (pointer, obj) => {
+        this.input.on("dragend", (pointer, gameObject) => {
+
+            if (!gameObject.input || !gameObject.input.enabled) return;
 
             let correct = false;
 
             if (config.ruleType === "color") {
-                correct = (obj.colorTag === config.ruleValue);
-            } else {
-                correct = (obj.type === config.ruleValue);
+                correct = (gameObject.itemColor === config.ruleValue);
+            } else if (config.ruleType === "type") {
+                correct = (gameObject.itemType === config.ruleValue);
             }
 
-            if (Phaser.Geom.Rectangle.Contains(target.getBounds(), obj.x, obj.y) && correct) {
+            let inBox = Phaser.Geom.Rectangle.Contains(
+                target.getBounds(),
+                gameObject.x,
+                gameObject.y
+            );
 
-                obj.disableInteractive();
-                obj.x = width/2;
-                obj.y = height - 160 + Phaser.Math.Between(-20, 20);
+            if (inBox && correct) {
+
+                gameObject.disableInteractive();
+
+                this.tweens.add({
+                    targets: gameObject,
+                    x: width/2,
+                    y: height - 150 + Phaser.Math.Between(-30, 30),
+                    scale: 0.6,
+                    duration: 200
+                });
 
                 placed++;
 
-                if (placed >= config.itemCount) {
+                if (placed >= itemCount) {
+
                     save.currentLevel++;
                     localStorage.setItem("cuteSave", JSON.stringify(save));
-                    this.scene.restart();
+
+                    this.time.delayedCall(800, () => {
+                        this.scene.restart();
+                    });
                 }
 
             } else {
+
+                // 错误回弹
                 this.tweens.add({
-                    targets: obj,
-                    x: Phaser.Math.Between(60, width - 60),
-                    y: Phaser.Math.Between(150, height - 320),
+                    targets: gameObject,
+                    x: Phaser.Math.Between(80, width - 80),
+                    y: Phaser.Math.Between(150, height - 300),
                     duration: 300
                 });
             }
-
         });
+
+        // ===== 时间限制 =====
+        if (timeLimit > 0) {
+
+            this.time.addEvent({
+                delay: 1000,
+                loop: true,
+                callback: () => {
+
+                    let timeUsed = Math.floor((Date.now() - startTime) / 1000);
+                    let left = timeLimit - timeUsed;
+
+                    timerText.setText("剩余: " + left);
+
+                    if (left <= 0) {
+                        this.scene.restart();
+                    }
+                }
+            });
+        }
     }
-}
+
+    
