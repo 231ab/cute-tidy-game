@@ -19,8 +19,27 @@ export class GameScene extends Phaser.Scene {
         bg.fillRect(0, 0, width, height);
 
         // ========= 读取存档 =========
-        let save = JSON.parse(localStorage.getItem("cuteSave"));
-        let currentLevel = save.currentLevel;
+       // ==============================
+// 💾 安全读取存档（防止白屏）
+// ==============================
+
+let save = JSON.parse(localStorage.getItem("cuteSave"));
+
+// 如果没有存档（比如第一次进入、清缓存、无痕模式）
+if (!save) {
+    save = {
+        currentLevel: 1
+    };
+    localStorage.setItem("cuteSave", JSON.stringify(save));
+}
+
+// 如果数据结构异常也修复
+if (!save.currentLevel || save.currentLevel < 1) {
+    save.currentLevel = 1;
+    localStorage.setItem("cuteSave", JSON.stringify(save));
+}
+
+let currentLevel = save.currentLevel;
 
         if (currentLevel > 30) {
             currentLevel = 1;
