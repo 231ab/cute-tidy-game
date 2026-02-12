@@ -1,0 +1,14 @@
+/* 页面无滚动条 */
+html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: linear-gradient(180deg, #FFF0F5, #FFE4E1);
+    font-family: "Arial", sans-serif;
+}
+
+/* 让游戏居中 */
+#game-container {
+    width: 100vw;
+    height: 100vh;
+}
