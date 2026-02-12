@@ -14,7 +14,10 @@ export class GameScene extends Phaser.Scene {
         let save = JSON.parse(localStorage.getItem("cuteSave"));
 
         if (!save) {
-            save = { currentLevel: 1 };
+            save = {
+                currentLevel: 1,
+                tutorialShown: false   // 是否已显示教学
+            };
             localStorage.setItem("cuteSave", JSON.stringify(save));
         }
 
@@ -28,17 +31,10 @@ export class GameScene extends Phaser.Scene {
 
         let config = levels[currentLevel - 1];
 
-        if (!config) {
-            this.scene.restart();
-            return;
-        }
-
         let itemCount = config.itemCount;
         let timeLimit = config.timeLimit;
 
-        let placed = 0;          // 已正确整理数量
-        let targetCount = 0;     // 本关需要整理的目标数量
-
+        let placed = 0;
         let startTime = Date.now();
 
         // ===== 标题 =====
@@ -61,6 +57,31 @@ export class GameScene extends Phaser.Scene {
             color: "#FF1493"
         }).setOrigin(0.5);
 
+        // ===== 首次教学提示 =====
+        if (!save.tutorialShown) {
+
+            let bg = this.add.rectangle(width/2, height/2, 320, 200, 0xffffff)
+                .setStrokeStyle(3, 0xFF69B4);
+
+            let tip = this.add.text(width/2, height/2,
+                "拖动符合规则的物品\n到下方整理盒即可过关",
+                {
+                    fontSize: "18px",
+                    color: "#FF1493",
+                    align: "center"
+                }
+            ).setOrigin(0.5);
+
+            bg.setInteractive();
+            bg.on("pointerdown", () => {
+                bg.destroy();
+                tip.destroy();
+            });
+
+            save.tutorialShown = true;
+            localStorage.setItem("cuteSave", JSON.stringify(save));
+        }
+
         // ===== 计时器 =====
         let timerText = this.add.text(width - 20, 40, "", {
             fontSize: "18px",
@@ -76,37 +97,57 @@ export class GameScene extends Phaser.Scene {
             color: "#ffffff"
         }).setOrigin(0.5);
 
+        // ===== 重开按钮 =====
+        let restartBtn = this.add.text(width - 60, height - 40, "重开", {
+            fontSize: "18px",
+            backgroundColor: "#FF69B4",
+            color: "#ffffff",
+            padding: { x: 10, y: 5 }
+        }).setOrigin(0.5).setInteractive();
+
+        restartBtn.on("pointerdown", () => {
+            this.scene.restart();
+        });
+
         // ===== 生成物品 =====
+
         const types = ["toy", "food", "clothes"];
         const colors = ["pink", "blue", "yellow"];
+
+        let items = [];
+
+        // ⭐ 强制生成至少3个符合规则的物品
+        let targetCount = 3;
 
         for (let i = 0; i < itemCount; i++) {
 
             let x = Phaser.Math.Between(80, width - 80);
             let y = Phaser.Math.Between(150, height - 300);
 
-            let type = types[Phaser.Math.Between(0, 2)];
-            let color = colors[Phaser.Math.Between(0, 2)];
+            let type;
+            let color;
+
+            if (i < targetCount) {
+                // 前几个强制符合规则
+                if (config.ruleType === "color") {
+                    color = config.ruleValue;
+                    type = types[Phaser.Math.Between(0, 2)];
+                } else {
+                    type = config.ruleValue;
+                    color = colors[Phaser.Math.Between(0, 2)];
+                }
+            } else {
+                // 其他随机
+                type = types[Phaser.Math.Between(0, 2)];
+                color = colors[Phaser.Math.Between(0, 2)];
+            }
 
             let item = this.createCuteItem(x, y, type, color);
-
             item.itemType = type;
             item.itemColor = color;
 
-            // ⭐ 统计符合规则的数量
-            if (
-                (config.ruleType === "color" && color === config.ruleValue) ||
-                (config.ruleType === "type" && type === config.ruleValue)
-            ) {
-                targetCount++;
-            }
+            items.push(item);
         }
-
-        // 防止随机没有生成符合规则的物品
-        if (targetCount === 0) {
-            targetCount = 1;
-        }
-
         // ===== 拖动逻辑 =====
         this.input.on("drag", (pointer, gameObject, dragX, dragY) => {
             gameObject.x = dragX;
@@ -121,7 +162,7 @@ export class GameScene extends Phaser.Scene {
 
             if (config.ruleType === "color") {
                 correct = (gameObject.itemColor === config.ruleValue);
-            } else if (config.ruleType === "type") {
+            } else {
                 correct = (gameObject.itemType === config.ruleValue);
             }
 
@@ -145,7 +186,6 @@ export class GameScene extends Phaser.Scene {
 
                 placed++;
 
-                // ⭐ 只判断目标数量
                 if (placed >= targetCount) {
 
                     save.currentLevel++;
@@ -158,7 +198,6 @@ export class GameScene extends Phaser.Scene {
 
             } else {
 
-                // 错误回弹
                 this.tweens.add({
                     targets: gameObject,
                     x: Phaser.Math.Between(80, width - 80),
@@ -175,7 +214,8 @@ export class GameScene extends Phaser.Scene {
                 delay: 1000,
                 loop: true,
                 callback: () => {
-let timeUsed = Math.floor((Date.now() - startTime) / 1000);
+
+                    let timeUsed = Math.floor((Date.now() - startTime) / 1000);
                     let left = timeLimit - timeUsed;
 
                     timerText.setText("剩余: " + left);
@@ -188,9 +228,7 @@ let timeUsed = Math.floor((Date.now() - startTime) / 1000);
         }
     }
 
-    // ===============================
-    // ⭐ 可爱物品绘制
-    // ===============================
+    // ===== 可爱物品绘制 =====
     createCuteItem(x, y, type, color) {
 
         const container = this.add.container(x, y);
@@ -202,7 +240,7 @@ let timeUsed = Math.floor((Date.now() - startTime) / 1000);
             yellow: 0xfff3a6
         };
 
-        const fillColor = colorMap[color] || 0xffc0cb;
+        const fillColor = colorMap[color];
 
         if (type === "toy") {
 
@@ -248,4 +286,3 @@ let timeUsed = Math.floor((Date.now() - startTime) / 1000);
         return container;
     }
 }
-                    
