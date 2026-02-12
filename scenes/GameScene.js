@@ -9,310 +9,259 @@ export class GameScene extends Phaser.Scene {
     create() {
 
         const { width, height } = this.scale;
-        this.width = width;
-        this.height = height;
 
-        // ===== 初始化存档 =====
-        this.initSave();
+        // ===== 渐变天空背景 =====
+        const bg = this.add.graphics();
+        bg.fillGradientStyle(0xfff0f6, 0xfff0f6, 0xd6f0ff, 0xd6f0ff, 1);
+        bg.fillRect(0, 0, width, height);
 
-        // ===== 当前关卡配置 =====
-        this.config = levels[this.currentLevel - 1];
+        // ===== 读取存档 =====
+        const save = JSON.parse(localStorage.getItem("cuteSave")) || {
+            currentLevel: 1
+        };
 
-        // ===== 初始化变量 =====
-        this.placed = 0;
-        this.targetCount = 3;
+        let levelIndex = save.currentLevel - 1;
+        if (levelIndex >= levels.length) levelIndex = 0;
 
-        // ===== 初始化UI =====
-        this.initUI();
+        const config = levels[levelIndex];
 
-        // ===== 初始化物品 =====
-        this.initItems();
+        // ===== 顶部卡片栏 =====
+        const topCard = this.add.rectangle(
+            width / 2,
+            90,
+            width - 40,
+            110,
+            0xffffff
+        ).setStrokeStyle(2, 0xffcce6);
 
-        // ===== 初始化拖拽系统 =====
-        this.initDrag();
+        topCard.setDepth(1);
 
-        // ===== 初始化时间系统 =====
-        this.initTimer();
+        this.add.text(width / 2, 55,
+            "第 " + config.level + " 关",
+            { fontSize: "26px", color: "#ff69b4" }
+        ).setOrigin(0.5).setDepth(2);
 
-        // ===== 教学 =====
-        if (!this.save.tutorialShown) {
-            this.showTutorial();
-        }
-    }
+        // ===== 规则 =====
+        const types = ["🐻", "🍰", "👗", "🧁", "🎀"];
+        const colors = [0xffb6c1, 0xadd8e6, 0xfff5ba, 0xd8bfd8];
 
-    // ===============================
-    // 存档系统
-    // ===============================
-    initSave() {
+        const ruleType = Phaser.Math.Between(0, 1) === 0 ? "color" : "type";
+        const ruleValue = ruleType === "color"
+            ? Phaser.Utils.Array.GetRandom(colors)
+            : Phaser.Utils.Array.GetRandom(types);
 
-        this.save = JSON.parse(localStorage.getItem("cuteSave"));
+        let ruleText = ruleType === "color"
+            ? "整理这个颜色的物品"
+            : "整理这个物品：" + ruleValue;
 
-        if (!this.save) {
-            this.save = {
-                currentLevel: 1,
-                tutorialShown: false
-            };
-            localStorage.setItem("cuteSave", JSON.stringify(this.save));
-        }
+        this.add.text(width / 2, 100,
+            ruleText,
+            { fontSize: "20px", color: "#555" }
+        ).setOrigin(0.5).setDepth(2);
 
-        this.currentLevel = this.save.currentLevel;
+        // ===== 倒计时 =====
+        let timeLeft = config.timeLimit;
 
-        if (this.currentLevel > levels.length) {
-            this.currentLevel = 1;
-            this.save.currentLevel = 1;
-            localStorage.setItem("cuteSave", JSON.stringify(this.save));
-        }
-    }
+        const timerBg = this.add.rectangle(width - 60, 50, 80, 36, 0xffffff)
+            .setStrokeStyle(2, 0xffb6c1);
 
-    // ===============================
-    // UI系统
-    // ===============================
-    initUI() {
-
-        const { width, height } = this;
-
-        this.add.text(width/2, 40, "第 " + this.currentLevel + " 关", {
-            fontSize: "24px",
-            color: "#FF69B4"
-        }).setOrigin(0.5);
-
-        // 规则
-        let ruleText = this.config.ruleType === "color"
-            ? "整理颜色：" + this.config.ruleValue
-            : "整理类型：" + this.config.ruleValue;
-
-        this.add.text(width/2, 110, ruleText, {
-            fontSize: "18px",
-            color: "#FF1493"
-        }).setOrigin(0.5);
-
-        // 整理盒
-        this.target = this.add.rectangle(width/2, height - 150, 260, 120, 0xFFD1DC);
-        this.target.setStrokeStyle(4, 0xFF69B4);
-
-        this.add.text(width/2, height - 150, "整理盒", {
-            fontSize: "20px",
-            color: "#ffffff"
-        }).setOrigin(0.5);
-
-        // 重开按钮
-        let restartBg = this.add.circle(width - 35, 35, 25, 0xFF69B4)
-            .setDepth(2000)
-            .setInteractive();
-
-        let restartText = this.add.text(width - 35, 35, "↺", {
-            fontSize: "22px",
-            color: "#ffffff"
-        })
-        .setOrigin(0.5)
-        .setDepth(2001);
-
-        restartBg.on("pointerdown", () => {
-            this.scene.restart();
-        });
-
-        // 计时文字
-        this.timerText = this.add.text(width - 20, 70, "", {
-            fontSize: "20px",
-            color: "#FF1493"
-        })
-        .setOrigin(1, 0.5)
-        .setDepth(1500);
-    }
-
-    // ===============================
-    // 物品生成
-    // ===============================
-    initItems() {
-
-        const types = ["toy", "food", "clothes"];
-        const colors = ["pink", "blue", "yellow"];
-
-        this.items = [];
-
-        for (let i = 0; i < this.config.itemCount; i++) {
-
-            let x = Phaser.Math.Between(80, this.width - 80);
-            let y = Phaser.Math.Between(150, this.height - 300);
-
-            let type;
-            let color;
-
-            if (i < this.targetCount) {
-                if (this.config.ruleType === "color") {
-                    color = this.config.ruleValue;
-                    type = Phaser.Utils.Array.GetRandom(types);
-                } else {
-                    type = this.config.ruleValue;
-                    color = Phaser.Utils.Array.GetRandom(colors);
-                }
-            } else {
-                type = Phaser.Utils.Array.GetRandom(types);
-                color = Phaser.Utils.Array.GetRandom(colors);
-            }
-
-            let item = this.createCuteItem(x, y, type, color);
-            item.itemType = type;
-            item.itemColor = color;
-
-            this.items.push(item);
-        }
-    }
-
-    // ===============================
-    // 拖拽系统
-    // ===============================
-    initDrag() {
-
-        this.input.on("drag", (pointer, obj, dragX, dragY) => {
-            obj.x = dragX;
-            obj.y = dragY;
-        });
-
-        this.input.on("dragend", (pointer, obj) => {
-
-            if (!obj.input || !obj.input.enabled) return;
-
-            let correct = this.config.ruleType === "color"
-                ? obj.itemColor === this.config.ruleValue
-                : obj.itemType === this.config.ruleValue;
-
-            let inBox = Phaser.Geom.Rectangle.Contains(
-                this.target.getBounds(),
-                obj.x,
-                obj.y
-            );
-
-            if (inBox && correct) {
-
-                obj.disableInteractive();
-
-                this.tweens.add({
-                    targets: obj,
-                    x: this.width/2,
-                    y: this.height - 150,
-                    scale: 0.6,
-                    duration: 200
-                });
-
-                this.placed++;
-
-                if (this.placed >= this.targetCount) {
-                    this.save.currentLevel++;
-                    localStorage.setItem("cuteSave", JSON.stringify(this.save));
-
-                    this.time.delayedCall(800, () => {
-                        this.scene.restart();
-                    });
-                }
-
-            } else {
-
-                // 扣时间
-                if (this.config.timeLimit > 0) {
-                    this.currentTime -= 2;
-                    if (this.currentTime < 0) this.currentTime = 0;
-                    this.timerText.setText("剩余: " + this.currentTime);
-                    this.cameras.main.flash(200, 255, 100, 100);
-                }
-
-                this.tweens.add({
-                    targets: obj,
-                    x: Phaser.Math.Between(80, this.width - 80),
-                    y: Phaser.Math.Between(150, this.height - 300),
-                    duration: 300
-                });
-            }
-        });
-    }
-
-    // ===============================
-    // 时间系统（单一逻辑）
-    // ===============================
-    initTimer() {
-
-        if (this.config.timeLimit <= 0) {
-            this.timerText.setText("剩余: ∞");
-            return;
-        }
-
-        this.currentTime = this.config.timeLimit;
-        this.timerText.setText("剩余: " + this.currentTime);
+        const timerText = this.add.text(width - 60, 50, "⏳ " + timeLeft,
+            { fontSize: "18px", color: "#ff4d4d" }
+        ).setOrigin(0.5);
 
         this.time.addEvent({
             delay: 1000,
             loop: true,
             callback: () => {
+                timeLeft--;
+                timerText.setText("⏳ " + timeLeft);
+                if (timeLeft <= 0) this.scene.restart();
+            }
+        });
 
-                this.currentTime--;
+        // ===== 收纳盒（立体风）=====
+        const targetShadow = this.add.rectangle(
+            width / 2,
+            height - 145,
+            240,
+            130,
+            0x000000,
+            0.15
+        );
 
-                this.timerText.setText("剩余: " + this.currentTime);
+        const target = this.add.rectangle(
+            width / 2,
+            height - 150,
+            240,
+            130,
+            0xffffff
+        ).setStrokeStyle(3, 0xffb6c1);
 
-                if (this.currentTime <= 0) {
-                    this.scene.restart();
+        this.add.text(width / 2, height - 150,
+            "收纳盒",
+            { fontSize: "22px", color: "#ff69b4" }
+        ).setOrigin(0.5);
+
+        // ===== 生成物品 =====
+        let placed = 0;
+        let targetCount = 0;
+
+        for (let i = 0; i < config.itemCount; i++) {
+
+            let x = Phaser.Math.Between(80, width - 80);
+            let y = Phaser.Math.Between(180, height - 350);
+
+            let color = Phaser.Utils.Array.GetRandom(colors);
+            let type = Phaser.Utils.Array.GetRandom(types);
+
+            if (i < 2) {
+                if (ruleType === "color") color = ruleValue;
+                else type = ruleValue;
+            }
+
+            if ((ruleType === "color" && color === ruleValue) ||
+                (ruleType === "type" && type === ruleValue)) {
+                targetCount++;
+            }
+
+            const circleShadow = this.add.circle(x + 4, y + 6, 46, 0x000000, 0.15);
+            const circle = this.add.circle(x, y, 46, color)
+                .setStrokeStyle(3, 0xffffff);
+
+            const icon = this.add.text(x, y, type, {
+                fontSize: "42px"
+            }).setOrigin(0.5);
+
+            const container = this.add.container(0, 0, [circleShadow, circle, icon]);
+            container.setSize(90, 90);
+            container.setInteractive();
+            this.input.setDraggable(container);
+
+            container.itemColor = color;
+            container.itemType = type;
+
+            // 呼吸动画
+            this.tweens.add({
+                targets: container,
+                scale: 1.06,
+                duration: 1000,
+                yoyo: true,
+                repeat: -1
+            });
+
+            this.input.on("drag", (pointer, obj, dragX, dragY) => {
+                if (obj === container) {
+                    obj.x = dragX;
+                    obj.y = dragY;
                 }
-            }
+            });
+
+            this.input.on("dragend", (pointer, obj) => {
+
+                if (obj !== container) return;
+
+                timeLeft = Math.max(0, timeLeft - 1);
+                timerText.setText("⏳ " + timeLeft);
+
+                let correct = false;
+
+                 if (ruleType === "color") {
+                    correct = obj.itemColor === ruleValue;
+                } else {
+                    correct = obj.itemType === ruleValue;
+                }
+
+                let inBox = Phaser.Geom.Rectangle.Contains(
+                    target.getBounds(),
+                    obj.x,
+                    obj.y
+                );
+
+                if (inBox && correct) {
+
+                    obj.disableInteractive();
+
+                    this.tweens.add({
+                        targets: obj,
+                        x: width / 2,
+                        y: height - 150 + Phaser.Math.Between(-30, 30),
+                        scale: 0.6,
+                        duration: 250,
+                        ease: "Back.easeOut"
+                    });
+
+                    // ✨ 爱心粒子
+                    for (let i = 0; i < 6; i++) {
+                        let heart = this.add.text(
+                            obj.x,
+                            obj.y,
+                            "💖",
+                            { fontSize: "20px" }
+                        );
+
+                        this.tweens.add({
+                            targets: heart,
+                            y: heart.y - 60,
+                            alpha: 0,
+                            duration: 800,
+                            onComplete: () => heart.destroy()
+                        });
+                    }
+
+                    placed++;
+
+                    if (placed >= targetCount) {
+
+                        const nextText = this.add.text(
+                            width / 2,
+                            height / 2,
+                            "✨ 即将进入下一关 ✨",
+                            {
+                                fontSize: "28px",
+                                color: "#ff69b4"
+                            }
+                        ).setOrigin(0.5);
+
+                        save.currentLevel++;
+                        localStorage.setItem("cuteSave", JSON.stringify(save));
+
+                        this.time.delayedCall(1200, () => {
+                            this.scene.restart();
+                        });
+                    }
+
+                } else {
+
+                    this.tweens.add({
+                        targets: obj,
+                        x: Phaser.Math.Between(80, width - 80),
+                        y: Phaser.Math.Between(180, height - 350),
+                        duration: 300
+                    });
+                }
+            });
+        }
+
+        // ===== 重开按钮（立体渐变）=====
+        const restartBtn = this.add.rectangle(
+            width - 60,
+            100,
+            100,
+            40,
+            0xffb6c1
+        ).setStrokeStyle(2, 0xffffff)
+         .setInteractive();
+
+        const restartText = this.add.text(
+            width - 60,
+            100,
+            "重开",
+            { fontSize: "18px", color: "#ffffff" }
+        ).setOrigin(0.5);
+
+        restartBtn.on("pointerdown", () => {
+            this.scene.restart();
         });
-    }
-
-    // ===============================
-    // 教学弹窗
-    // ===============================
-    showTutorial() {
-
-        let overlay = this.add.rectangle(this.width/2, this.height/2,
-            this.width, this.height, 0x000000, 0.5)
-            .setDepth(9999)
-            .setInteractive();
-
-        let bg = this.add.rectangle(this.width/2, this.height/2,
-            320, 220, 0xffffff)
-            .setStrokeStyle(4, 0xFF69B4)
-            .setDepth(10000);
-
-        let tip = this.add.text(this.width/2, this.height/2,
-            "拖动符合规则的物品\n到整理盒即可过关\n\n点击关闭",
-            {
-                fontSize: "18px",
-                color: "#FF1493",
-                align: "center"
-            }
-        )
-        .setOrigin(0.5)
-        .setDepth(10001);
-
-        overlay.on("pointerdown", () => {
-            overlay.destroy();
-            bg.destroy();
-            tip.destroy();
-        });
-
-        this.save.tutorialShown = true;
-        localStorage.setItem("cuteSave", JSON.stringify(this.save));
-    }
-
-    // ===============================
-    // 可爱物品绘制
-    // ===============================
-    createCuteItem(x, y, type, color) {
-
-        const container = this.add.container(x, y);
-        const g = this.add.graphics();
-
-        const colorMap = {
-            pink: 0xffa6c9,
-            blue: 0xa6d8ff,
-            yellow: 0xfff3a6
-        };
-
-        g.fillStyle(colorMap[color], 1);
-        g.fillCircle(0, 0, 35);
-
-        container.add(g);
-        container.setSize(80, 80);
-        container.setInteractive({ draggable: true });
-        this.input.setDraggable(container);
-
-        return container;
     }
 }
+                  
