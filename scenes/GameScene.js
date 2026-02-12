@@ -181,5 +181,68 @@ export class GameScene extends Phaser.Scene {
             });
         }
     }
+// ===============================
+    // ⭐ 可爱物品绘制函数
+    // ===============================
+    createCuteItem(x, y, type, color) {
 
+        const container = this.add.container(x, y);
+        const g = this.add.graphics();
+
+        const colorMap = {
+            pink: 0xffa6c9,
+            blue: 0xa6d8ff,
+            yellow: 0xfff3a6
+        };
+
+        const fillColor = colorMap[color] || 0xffc0cb;
+
+        // ===== 玩具 =====
+        if (type === "toy") {
+
+            g.fillStyle(fillColor, 1);
+            g.fillCircle(0, 0, 35);
+
+            g.fillStyle(0x000000);
+            g.fillCircle(-10, -5, 4);
+            g.fillCircle(10, -5, 4);
+
+            g.fillStyle(0xff7f7f);
+            g.fillCircle(-18, 10, 5);
+            g.fillCircle(18, 10, 5);
+        }
+
+        // ===== 食物 =====
+        else if (type === "food") {
+
+            g.fillStyle(fillColor, 1);
+            g.fillRoundedRect(-35, -25, 70, 50, 12);
+
+            g.fillStyle(0xffffff);
+            g.fillCircle(0, -20, 10);
+
+            g.fillStyle(0xff0000);
+            g.fillCircle(0, -30, 6);
+        }
+
+        // ===== 衣服 =====
+        else {
+
+            g.fillStyle(fillColor, 1);
+            g.fillRoundedRect(-40, -30, 80, 60, 15);
+
+            g.fillStyle(0xffffff);
+            g.fillCircle(0, -20, 8);
+        }
+
+        container.add(g);
+
+        container.setSize(80, 80);
+        container.setInteractive({ draggable: true });
+
+        this.input.setDraggable(container);
+
+        return container;
+    }
+}
     
