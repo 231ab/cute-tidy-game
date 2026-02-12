@@ -64,7 +64,7 @@ export class GameScene extends Phaser.Scene {
 
                 if (Phaser.Geom.Rectangle.Contains(target.getBounds(), gameObject.x, gameObject.y)) {
 
-                    this.sound.play("success");
+                    // this.sound.play("success");
 
                     gameObject.disableInteractive();
                     gameObject.x = width/2;
@@ -85,7 +85,7 @@ export class GameScene extends Phaser.Scene {
                     }
 
                 } else {
-                    this.sound.play("fail");
+                    //this.sound.play("fail");
                 }
 
             });
@@ -105,7 +105,7 @@ export class GameScene extends Phaser.Scene {
                     timerText.setText("剩余: " + left);
 
                     if (left <= 0) {
-                        this.sound.play("fail");
+                       // this.sound.play("fail");
                         this.scene.restart();
                     }
                 }
