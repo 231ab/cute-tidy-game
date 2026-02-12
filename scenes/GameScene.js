@@ -9,267 +9,291 @@ export class GameScene extends Phaser.Scene {
     create() {
 
         const { width, height } = this.scale;
+        this.width = width;
+        this.height = height;
 
-        // ===== 读取存档 =====
-        let save = JSON.parse(localStorage.getItem("cuteSave"));
+        // ===== 初始化存档 =====
+        this.initSave();
 
-        if (!save) {
-            save = {
+        // ===== 当前关卡配置 =====
+        this.config = levels[this.currentLevel - 1];
+
+        // ===== 初始化变量 =====
+        this.placed = 0;
+        this.targetCount = 3;
+
+        // ===== 初始化UI =====
+        this.initUI();
+
+        // ===== 初始化物品 =====
+        this.initItems();
+
+        // ===== 初始化拖拽系统 =====
+        this.initDrag();
+
+        // ===== 初始化时间系统 =====
+        this.initTimer();
+
+        // ===== 教学 =====
+        if (!this.save.tutorialShown) {
+            this.showTutorial();
+        }
+    }
+
+    // ===============================
+    // 存档系统
+    // ===============================
+    initSave() {
+
+        this.save = JSON.parse(localStorage.getItem("cuteSave"));
+
+        if (!this.save) {
+            this.save = {
                 currentLevel: 1,
-                tutorialShown: false   // 是否已显示教学
+                tutorialShown: false
             };
-            localStorage.setItem("cuteSave", JSON.stringify(save));
+            localStorage.setItem("cuteSave", JSON.stringify(this.save));
         }
 
-        let currentLevel = save.currentLevel;
+        this.currentLevel = this.save.currentLevel;
 
-        if (currentLevel > levels.length) {
-            currentLevel = 1;
-            save.currentLevel = 1;
-            localStorage.setItem("cuteSave", JSON.stringify(save));
+        if (this.currentLevel > levels.length) {
+            this.currentLevel = 1;
+            this.save.currentLevel = 1;
+            localStorage.setItem("cuteSave", JSON.stringify(this.save));
         }
+    }
 
-        let config = levels[currentLevel - 1];
+    // ===============================
+    // UI系统
+    // ===============================
+    initUI() {
 
-        let itemCount = config.itemCount;
-        let timeLimit = config.timeLimit;
+        const { width, height } = this;
 
-        let placed = 0;
-        let startTime = Date.now();
-
-        // ===== 标题 =====
-        this.add.text(width/2, 40, "第 " + currentLevel + " 关", {
+        this.add.text(width/2, 40, "第 " + this.currentLevel + " 关", {
             fontSize: "24px",
             color: "#FF69B4"
         }).setOrigin(0.5);
 
-        // ===== 规则显示 =====
-        let ruleText = "";
-
-        if (config.ruleType === "color") {
-            ruleText = "请整理颜色为：" + config.ruleValue;
-        } else {
-            ruleText = "请整理类型为：" + config.ruleValue;
-        }
+        // 规则
+        let ruleText = this.config.ruleType === "color"
+            ? "整理颜色：" + this.config.ruleValue
+            : "整理类型：" + this.config.ruleValue;
 
         this.add.text(width/2, 110, ruleText, {
             fontSize: "18px",
             color: "#FF1493"
         }).setOrigin(0.5);
 
-        // ===== 首次教学提示 =====
-        if (!save.tutorialShown) {
-
-    // 半透明遮罩（锁住底层）
-    let overlay = this.add.rectangle(width/2, height/2, width, height, 0x000000, 0.5)
-        .setDepth(1999);
-
-    let bg = this.add.rectangle(width/2, height/2, 320, 220, 0xffffff)
-        .setStrokeStyle(4, 0xFF69B4)
-        .setDepth(2000);
-
-    let tip = this.add.text(width/2, height/2,
-        "拖动符合规则的物品\n到下方整理盒即可过关\n\n点击关闭",
-        {
-            fontSize: "18px",
-            color: "#FF1493",
-            align: "center"
-        }
-    )
-    .setOrigin(0.5)
-    .setDepth(2001);
-
-    // 让整个弹窗可点击关闭
-    overlay.setInteractive();
-    bg.setInteractive();
-
-    overlay.on("pointerdown", closeTutorial);
-    bg.on("pointerdown", closeTutorial);
-
-    function closeTutorial() {
-        overlay.destroy();
-        bg.destroy();
-        tip.destroy();
-    }
-
-    save.tutorialShown = true;
-    localStorage.setItem("cuteSave", JSON.stringify(save));
-        }
-
-
-        // ===== 计时器 =====
-        let timerText = this.add.text(width - 20, 40, "", {
-            fontSize: "18px",
-            color: "#FF1493"
-        }).setOrigin(1, 0.5);
-
-        // ===== 整理盒 =====
-        let target = this.add.rectangle(width/2, height - 150, 260, 120, 0xFFD1DC);
-        target.setStrokeStyle(4, 0xFF69B4);
+        // 整理盒
+        this.target = this.add.rectangle(width/2, height - 150, 260, 120, 0xFFD1DC);
+        this.target.setStrokeStyle(4, 0xFF69B4);
 
         this.add.text(width/2, height - 150, "整理盒", {
             fontSize: "20px",
             color: "#ffffff"
         }).setOrigin(0.5);
 
-        // ===== 重开按钮（右上角小圆按钮） =====
+        // 重开按钮
+        let restartBg = this.add.circle(width - 35, 35, 25, 0xFF69B4)
+            .setDepth(2000)
+            .setInteractive();
 
-let restartBg = this.add.circle(width - 35, 35, 25, 0xFF69B4)
-    .setDepth(1000);
+        let restartText = this.add.text(width - 35, 35, "↺", {
+            fontSize: "22px",
+            color: "#ffffff"
+        })
+        .setOrigin(0.5)
+        .setDepth(2001);
 
-let restartText = this.add.text(width - 35, 35, "↺", {
-    fontSize: "22px",
-    color: "#ffffff"
-})
-.setOrigin(0.5)
-.setDepth(1001);
+        restartBg.on("pointerdown", () => {
+            this.scene.restart();
+        });
 
-restartBg.setInteractive();
+        // 计时文字
+        this.timerText = this.add.text(width - 20, 70, "", {
+            fontSize: "20px",
+            color: "#FF1493"
+        })
+        .setOrigin(1, 0.5)
+        .setDepth(1500);
+    }
 
-restartBg.on("pointerdown", () => {
-    this.scene.restart();
-});
-
-        // ===== 生成物品 =====
+    // ===============================
+    // 物品生成
+    // ===============================
+    initItems() {
 
         const types = ["toy", "food", "clothes"];
         const colors = ["pink", "blue", "yellow"];
 
-        let items = [];
+        this.items = [];
 
-        // ⭐ 强制生成至少3个符合规则的物品
-        let targetCount = 3;
+        for (let i = 0; i < this.config.itemCount; i++) {
 
-        for (let i = 0; i < itemCount; i++) {
-
-            let x = Phaser.Math.Between(80, width - 80);
-            let y = Phaser.Math.Between(150, height - 300);
+            let x = Phaser.Math.Between(80, this.width - 80);
+            let y = Phaser.Math.Between(150, this.height - 300);
 
             let type;
             let color;
 
-            if (i < targetCount) {
-                // 前几个强制符合规则
-                if (config.ruleType === "color") {
-                    color = config.ruleValue;
-                    type = types[Phaser.Math.Between(0, 2)];
+            if (i < this.targetCount) {
+                if (this.config.ruleType === "color") {
+                    color = this.config.ruleValue;
+                    type = Phaser.Utils.Array.GetRandom(types);
                 } else {
-                    type = config.ruleValue;
-                    color = colors[Phaser.Math.Between(0, 2)];
+                    type = this.config.ruleValue;
+                    color = Phaser.Utils.Array.GetRandom(colors);
                 }
             } else {
-                // 其他随机
-                type = types[Phaser.Math.Between(0, 2)];
-                color = colors[Phaser.Math.Between(0, 2)];
+                type = Phaser.Utils.Array.GetRandom(types);
+                color = Phaser.Utils.Array.GetRandom(colors);
             }
 
             let item = this.createCuteItem(x, y, type, color);
             item.itemType = type;
             item.itemColor = color;
 
-            items.push(item);
+            this.items.push(item);
         }
-        // ===== 拖动逻辑 =====
-        this.input.on("drag", (pointer, gameObject, dragX, dragY) => {
-            gameObject.x = dragX;
-            gameObject.y = dragY;
-        });
-
-       this.input.on("dragend", (pointer, gameObject) => {
-
-    if (!gameObject.input || !gameObject.input.enabled) return;
-
-    let correct = false;
-
-    // ===== 判断是否符合规则 =====
-    if (config.ruleType === "color") {
-        correct = (gameObject.itemColor === config.ruleValue);
-    } else {
-        correct = (gameObject.itemType === config.ruleValue);
     }
 
-    let inBox = Phaser.Geom.Rectangle.Contains(
-        target.getBounds(),
-        gameObject.x,
-        gameObject.y
-    );
+    // ===============================
+    // 拖拽系统
+    // ===============================
+    initDrag() {
 
-    if (inBox && correct) {
-
-        // ✅ 正确放置
-        gameObject.disableInteractive();
-
-        this.tweens.add({
-            targets: gameObject,
-            x: width / 2,
-            y: height - 150 + Phaser.Math.Between(-30, 30),
-            scale: 0.6,
-            duration: 200
+        this.input.on("drag", (pointer, obj, dragX, dragY) => {
+            obj.x = dragX;
+            obj.y = dragY;
         });
 
-        placed++;
+        this.input.on("dragend", (pointer, obj) => {
 
-        if (placed >= targetCount) {
+            if (!obj.input || !obj.input.enabled) return;
 
-            save.currentLevel++;
-            localStorage.setItem("cuteSave", JSON.stringify(save));
+            let correct = this.config.ruleType === "color"
+                ? obj.itemColor === this.config.ruleValue
+                : obj.itemType === this.config.ruleValue;
 
-            this.time.delayedCall(800, () => {
-                this.scene.restart();
-            });
-        }
+            let inBox = Phaser.Geom.Rectangle.Contains(
+                this.target.getBounds(),
+                obj.x,
+                obj.y
+            );
 
-    } else {
+            if (inBox && correct) {
 
-        // ❌ 放错 —— 扣时间 2 秒
-        if (timeLimit > 0) {
-            startTime += 2000; // 时间流逝加快2秒
-        
-        }
+                obj.disableInteractive();
 
-        this.tweens.add({
-            targets: gameObject,
-            x: Phaser.Math.Between(80, width - 80),
-            y: Phaser.Math.Between(150, height - 300),
-            duration: 300
-        });
-        
-    }
-}); 
+                this.tweens.add({
+                    targets: obj,
+                    x: this.width/2,
+                    y: this.height - 150,
+                    scale: 0.6,
+                    duration: 200
+                });
 
-        // ===== 时间限制 =====
-        // ===== 时间系统 =====
+                this.placed++;
 
-let currentTime = timeLimit > 0 ? timeLimit : 999;  // 无限制关卡给大值
+                if (this.placed >= this.targetCount) {
+                    this.save.currentLevel++;
+                    localStorage.setItem("cuteSave", JSON.stringify(this.save));
 
-let timerText = this.add.text(width - 20, 40, "", {
-    fontSize: "20px",
-    color: "#FF1493"
-})
-.setOrigin(1, 0.5)
-.setDepth(1500);   // 确保在上层
+                    this.time.delayedCall(800, () => {
+                        this.scene.restart();
+                    });
+                }
 
-timerText.setText("剩余: " + (timeLimit > 0 ? currentTime : "∞"));
+            } else {
 
-if (timeLimit > 0) {
+                // 扣时间
+                if (this.config.timeLimit > 0) {
+                    this.currentTime -= 2;
+                    if (this.currentTime < 0) this.currentTime = 0;
+                    this.timerText.setText("剩余: " + this.currentTime);
+                    this.cameras.main.flash(200, 255, 100, 100);
+                }
 
-    this.time.addEvent({
-        delay: 1000,
-        loop: true,
-        callback: () => {
-
-            currentTime--;
-
-            timerText.setText("剩余: " + currentTime);
-
-            if (currentTime <= 0) {
-                this.scene.restart();
+                this.tweens.add({
+                    targets: obj,
+                    x: Phaser.Math.Between(80, this.width - 80),
+                    y: Phaser.Math.Between(150, this.height - 300),
+                    duration: 300
+                });
             }
-        }
-    });
-}
+        });
+    }
 
-    // ===== 可爱物品绘制 =====
+    // ===============================
+    // 时间系统（单一逻辑）
+    // ===============================
+    initTimer() {
+
+        if (this.config.timeLimit <= 0) {
+            this.timerText.setText("剩余: ∞");
+            return;
+        }
+
+        this.currentTime = this.config.timeLimit;
+        this.timerText.setText("剩余: " + this.currentTime);
+
+        this.time.addEvent({
+            delay: 1000,
+            loop: true,
+            callback: () => {
+
+                this.currentTime--;
+
+                this.timerText.setText("剩余: " + this.currentTime);
+
+                if (this.currentTime <= 0) {
+                    this.scene.restart();
+                }
+            }
+        });
+    }
+
+    // ===============================
+    // 教学弹窗
+    // ===============================
+    showTutorial() {
+
+        let overlay = this.add.rectangle(this.width/2, this.height/2,
+            this.width, this.height, 0x000000, 0.5)
+            .setDepth(9999)
+            .setInteractive();
+
+        let bg = this.add.rectangle(this.width/2, this.height/2,
+            320, 220, 0xffffff)
+            .setStrokeStyle(4, 0xFF69B4)
+            .setDepth(10000);
+
+        let tip = this.add.text(this.width/2, this.height/2,
+            "拖动符合规则的物品\n到整理盒即可过关\n\n点击关闭",
+            {
+                fontSize: "18px",
+                color: "#FF1493",
+                align: "center"
+            }
+        )
+        .setOrigin(0.5)
+        .setDepth(10001);
+
+        overlay.on("pointerdown", () => {
+            overlay.destroy();
+            bg.destroy();
+            tip.destroy();
+        });
+
+        this.save.tutorialShown = true;
+        localStorage.setItem("cuteSave", JSON.stringify(this.save));
+    }
+
+    // ===============================
+    // 可爱物品绘制
+    // ===============================
     createCuteItem(x, y, type, color) {
 
         const container = this.add.container(x, y);
@@ -281,45 +305,10 @@ if (timeLimit > 0) {
             yellow: 0xfff3a6
         };
 
-        const fillColor = colorMap[color];
-
-        if (type === "toy") {
-
-            g.fillStyle(fillColor, 1);
-            g.fillCircle(0, 0, 35);
-
-            g.fillStyle(0x000000);
-            g.fillCircle(-10, -5, 4);
-            g.fillCircle(10, -5, 4);
-
-            g.fillStyle(0xff7f7f);
-            g.fillCircle(-18, 10, 5);
-            g.fillCircle(18, 10, 5);
-        }
-
-        else if (type === "food") {
-
-            g.fillStyle(fillColor, 1);
-            g.fillRoundedRect(-35, -25, 70, 50, 12);
-
-            g.fillStyle(0xffffff);
-            g.fillCircle(0, -20, 10);
-
-            g.fillStyle(0xff0000);
-            g.fillCircle(0, -30, 6);
-        }
-
-        else {
-
-            g.fillStyle(fillColor, 1);
-            g.fillRoundedRect(-40, -30, 80, 60, 15);
-
-            g.fillStyle(0xffffff);
-            g.fillCircle(0, -20, 8);
-        }
+        g.fillStyle(colorMap[color], 1);
+        g.fillCircle(0, 0, 35);
 
         container.add(g);
-
         container.setSize(80, 80);
         container.setInteractive({ draggable: true });
         this.input.setDraggable(container);
