@@ -14,15 +14,12 @@ export class GameScene extends Phaser.Scene {
         let save = JSON.parse(localStorage.getItem("cuteSave"));
 
         if (!save) {
-            save = {
-                currentLevel: 1
-            };
+            save = { currentLevel: 1 };
             localStorage.setItem("cuteSave", JSON.stringify(save));
         }
 
         let currentLevel = save.currentLevel;
 
-        // 防止超出关卡范围
         if (currentLevel > levels.length) {
             currentLevel = 1;
             save.currentLevel = 1;
@@ -31,9 +28,7 @@ export class GameScene extends Phaser.Scene {
 
         let config = levels[currentLevel - 1];
 
-        // 再次安全判断
         if (!config) {
-            console.warn("关卡不存在，重置");
             this.scene.restart();
             return;
         }
@@ -41,7 +36,9 @@ export class GameScene extends Phaser.Scene {
         let itemCount = config.itemCount;
         let timeLimit = config.timeLimit;
 
-        let placed = 0;
+        let placed = 0;          // 已正确整理数量
+        let targetCount = 0;     // 本关需要整理的目标数量
+
         let startTime = Date.now();
 
         // ===== 标题 =====
@@ -70,7 +67,7 @@ export class GameScene extends Phaser.Scene {
             color: "#FF1493"
         }).setOrigin(1, 0.5);
 
-        // ===== 整理区域 =====
+        // ===== 整理盒 =====
         let target = this.add.rectangle(width/2, height - 150, 260, 120, 0xFFD1DC);
         target.setStrokeStyle(4, 0xFF69B4);
 
@@ -79,9 +76,7 @@ export class GameScene extends Phaser.Scene {
             color: "#ffffff"
         }).setOrigin(0.5);
 
-        // ===== 创建物品 =====
-        let items = [];
-
+        // ===== 生成物品 =====
         const types = ["toy", "food", "clothes"];
         const colors = ["pink", "blue", "yellow"];
 
@@ -98,10 +93,21 @@ export class GameScene extends Phaser.Scene {
             item.itemType = type;
             item.itemColor = color;
 
-            items.push(item);
+            // ⭐ 统计符合规则的数量
+            if (
+                (config.ruleType === "color" && color === config.ruleValue) ||
+                (config.ruleType === "type" && type === config.ruleValue)
+            ) {
+                targetCount++;
+            }
         }
 
-        // ===== 拖动 =====
+        // 防止随机没有生成符合规则的物品
+        if (targetCount === 0) {
+            targetCount = 1;
+        }
+
+        // ===== 拖动逻辑 =====
         this.input.on("drag", (pointer, gameObject, dragX, dragY) => {
             gameObject.x = dragX;
             gameObject.y = dragY;
@@ -139,7 +145,8 @@ export class GameScene extends Phaser.Scene {
 
                 placed++;
 
-                if (placed >= itemCount) {
+                // ⭐ 只判断目标数量
+                if (placed >= targetCount) {
 
                     save.currentLevel++;
                     localStorage.setItem("cuteSave", JSON.stringify(save));
@@ -168,8 +175,7 @@ export class GameScene extends Phaser.Scene {
                 delay: 1000,
                 loop: true,
                 callback: () => {
-
-                    let timeUsed = Math.floor((Date.now() - startTime) / 1000);
+let timeUsed = Math.floor((Date.now() - startTime) / 1000);
                     let left = timeLimit - timeUsed;
 
                     timerText.setText("剩余: " + left);
@@ -181,8 +187,9 @@ export class GameScene extends Phaser.Scene {
             });
         }
     }
-// ===============================
-    // ⭐ 可爱物品绘制函数
+
+    // ===============================
+    // ⭐ 可爱物品绘制
     // ===============================
     createCuteItem(x, y, type, color) {
 
@@ -197,7 +204,6 @@ export class GameScene extends Phaser.Scene {
 
         const fillColor = colorMap[color] || 0xffc0cb;
 
-        // ===== 玩具 =====
         if (type === "toy") {
 
             g.fillStyle(fillColor, 1);
@@ -212,7 +218,6 @@ export class GameScene extends Phaser.Scene {
             g.fillCircle(18, 10, 5);
         }
 
-        // ===== 食物 =====
         else if (type === "food") {
 
             g.fillStyle(fillColor, 1);
@@ -225,7 +230,6 @@ export class GameScene extends Phaser.Scene {
             g.fillCircle(0, -30, 6);
         }
 
-        // ===== 衣服 =====
         else {
 
             g.fillStyle(fillColor, 1);
@@ -239,10 +243,9 @@ export class GameScene extends Phaser.Scene {
 
         container.setSize(80, 80);
         container.setInteractive({ draggable: true });
-
         this.input.setDraggable(container);
 
         return container;
     }
 }
-    
+                    
