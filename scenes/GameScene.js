@@ -33,10 +33,10 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(1, 0.5);
 
         // 播放背景音乐
-        if (!this.sound.get("bgm")) {
-            let bgm = this.sound.add("bgm", { loop: true, volume: 0.3 });
-            bgm.play();
-        }
+       // if (!this.sound.get("bgm")) {
+       //     let bgm = this.sound.add("bgm", { loop: true, volume: 0.3 });
+       //     bgm.play();
+       // }
 
         // 目标区域
         let target = this.add.rectangle(width/2, height - 150, 260, 120, 0xFFB6C1);
