@@ -10,9 +10,7 @@ export class GameScene extends Phaser.Scene {
 
         const { width, height } = this.scale;
 
-        // ==============================
-        // 🌈 渐变背景（不会单调）
-        // ==============================
+        // ========= 背景 =========
         const bg = this.add.graphics();
         bg.fillGradientStyle(
             0xFFF0F5, 0xFFE4F2,
@@ -20,9 +18,7 @@ export class GameScene extends Phaser.Scene {
         );
         bg.fillRect(0, 0, width, height);
 
-        // ==============================
-        // 💾 读取存档
-        // ==============================
+        // ========= 读取存档 =========
         let save = JSON.parse(localStorage.getItem("cuteSave"));
         let currentLevel = save.currentLevel;
 
@@ -39,24 +35,19 @@ export class GameScene extends Phaser.Scene {
         let placed = 0;
         let startTime = Date.now();
 
-        // ==============================
-        // 🎀 标题
-        // ==============================
+        // ========= 标题 =========
         this.add.text(width/2, 50, "🌸 第 " + currentLevel + " 关 🌸", {
             fontSize: "26px",
             fontStyle: "bold",
             color: "#FF69B4"
         }).setOrigin(0.5);
 
-        // 计时
         let timerText = this.add.text(width - 20, 50, "", {
             fontSize: "18px",
             color: "#FF1493"
         }).setOrigin(1, 0.5);
 
-        // ==============================
-        // 🎯 目标区域（可爱风格）
-        // ==============================
+        // ========= 目标区域 =========
         let target = this.add.rectangle(width/2, height - 160, 280, 130, 0xFFB6C1, 0.9);
         target.setStrokeStyle(5, 0xFF69B4);
 
@@ -69,11 +60,7 @@ export class GameScene extends Phaser.Scene {
             repeat: -1
         });
 
-        // ==============================
-        // 🎁 创建物品
-        // ==============================
-        let items = [];
-
+        // ========= 创建物品 =========
         for (let i = 0; i < itemCount; i++) {
 
             let x = Phaser.Math.Between(60, width - 60);
@@ -85,21 +72,15 @@ export class GameScene extends Phaser.Scene {
             item.setScale(0.8);
 
             this.input.setDraggable(item);
-            items.push(item);
         }
 
-        // ==============================
-        // 🖐 拖动中
-        // ==============================
+        // ========= 拖动 =========
         this.input.on("drag", (pointer, gameObject, dragX, dragY) => {
             gameObject.x = dragX;
             gameObject.y = dragY;
-            gameObject.setScale(0.9); // 拖动放大
+            gameObject.setScale(0.9);
         });
 
-        // ==============================
-        // 🧲 拖动结束
-        // ==============================
         this.input.on("dragend", (pointer, gameObject) => {
 
             if (!gameObject.input.enabled) return;
@@ -107,10 +88,6 @@ export class GameScene extends Phaser.Scene {
             gameObject.setScale(0.8);
 
             if (Phaser.Geom.Rectangle.Contains(target.getBounds(), gameObject.x, gameObject.y)) {
-
-                // =====================
-                // ✅ 成功效果
-                // =====================
 
                 gameObject.disableInteractive();
 
@@ -121,16 +98,6 @@ export class GameScene extends Phaser.Scene {
                     duration: 300,
                     ease: "Back.out"
                 });
-
-                // ✨ 粒子特效
-                let particles = this.add.particles(0, 0, "box", {
-                    speed: { min: 50, max: 120 },
-                    scale: { start: 0.3, end: 0 },
-                    lifespan: 500,
-                    quantity: 10
-                });
-
-                particles.explode(15, gameObject.x, gameObject.y);
 
                 placed++;
 
@@ -144,9 +111,6 @@ export class GameScene extends Phaser.Scene {
 
             } else {
 
-                // =====================
-                // ❌ 放错反馈（抖动）
-                // =====================
                 this.tweens.add({
                     targets: gameObject,
                     x: gameObject.x + 10,
@@ -165,4 +129,44 @@ export class GameScene extends Phaser.Scene {
             }
         });
 
-   
+        // ========= 时间系统 =========
+        if (timeLimit > 0) {
+
+            this.time.addEvent({
+                delay: 1000,
+                loop: true,
+                callback: () => {
+
+                    let timeUsed = Math.floor((Date.now() - startTime) / 1000);
+                    let left = timeLimit - timeUsed;
+
+                    timerText.setText("剩余: " + left);
+
+                    if (left <= 0) {
+                        this.scene.restart();
+                    }
+                }
+            });
+        }
+    }
+
+    // ========= 过关弹窗 =========
+    showWinPopup(width, height) {
+
+        let panel = this.add.rectangle(width/2, height/2, 300, 200, 0xFFFFFF, 0.95);
+        panel.setStrokeStyle(4, 0xFF69B4);
+
+        this.add.text(width/2, height/2 - 40, "🎉 过关成功！", {
+            fontSize: "24px",
+            color: "#FF1493"
+        }).setOrigin(0.5);
+
+        let btn = this.add.text(width/2, height/2 + 40, "下一关 →", {
+            fontSize: "20px",
+            backgroundColor: "#FFB6C1",
+            padding: { x: 20, y: 10 },
+            color: "#FFFFFF"
+        }).setOrigin(0.5).setInteractive();
+
+        btn.on("pointerdown", () => {
+    
