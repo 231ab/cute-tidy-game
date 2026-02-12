@@ -224,7 +224,7 @@ restartBg.on("pointerdown", () => {
         // ❌ 放错 —— 扣时间 2 秒
         if (timeLimit > 0) {
             startTime += 2000; // 时间流逝加快2秒
-        this.cameras.main.flash(200, 255, 100, 100);
+        
         }
 
         this.tweens.add({
