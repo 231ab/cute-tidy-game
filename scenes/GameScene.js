@@ -188,4 +188,7 @@ let currentLevel = save.currentLevel;
         }).setOrigin(0.5).setInteractive();
 
         btn.on("pointerdown", () => {
-    
+    this.scene.restart();
+        });
+    }
+}
