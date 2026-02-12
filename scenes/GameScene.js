@@ -10,7 +10,7 @@ export class GameScene extends Phaser.Scene {
 
         const { width, height } = this.scale;
 
-        // ===== 读取存档 =====
+        // ===== 存档 =====
         let save = JSON.parse(localStorage.getItem("cuteSave"));
         if (!save) {
             save = { currentLevel: 1, tutorialShown: false };
@@ -22,36 +22,39 @@ export class GameScene extends Phaser.Scene {
 
         const config = levels[levelIndex];
 
-        let ruleType = config.ruleType;
-        let ruleValue = config.ruleValue;
-
         let placed = 0;
         let targetCount = 0;
         let timeLeft = config.timeLimit;
 
+        const ruleType = config.ruleType;
+        const ruleValue = config.ruleValue;
+
         // ===== 背景 =====
         this.add.rectangle(width/2, height/2, width, height, 0xfff6fb);
 
-        // ===== UI 层 =====
         const uiDepth = 1000;
 
+        // ===== 标题 =====
         this.add.text(width/2, 40,
             "第 " + config.level + " 关",
             { fontSize: "26px", color: "#ff69b4" }
         ).setOrigin(0.5).setDepth(uiDepth);
 
-        const ruleText = ruleType === "color"
-            ? "整理颜色：" + ruleValue
-            : "整理类型：" + ruleValue;
+        // ===== 规则UI =====
+        let ruleLabel = ruleType === "color" ? "🎨 颜色分类" : "🧸 类型分类";
+
+        this.add.rectangle(width/2, 90, 260, 50, 0xffffff)
+            .setStrokeStyle(3, 0xffb6c1)
+            .setDepth(uiDepth - 1);
 
         this.add.text(width/2, 90,
-            ruleText,
+            ruleLabel + "：" + ruleValue,
             { fontSize: "20px", color: "#555" }
         ).setOrigin(0.5).setDepth(uiDepth);
 
         // ===== 倒计时 =====
         const timerText = this.add.text(width - 20, 40,
-            "⏳ " + timeLeft,
+            timeLeft > 0 ? "⏳ " + timeLeft : "∞",
             { fontSize: "20px", color: "#ff4d4d" }
         ).setOrigin(1, 0.5).setDepth(uiDepth);
 
@@ -85,10 +88,10 @@ export class GameScene extends Phaser.Scene {
             width/2, height - 120,
             240, 120,
             0xffffff
-        ).setStrokeStyle(3, 0xffb6c1);
+        ).setStrokeStyle(4, 0xff69b4);
 
         this.add.text(width/2, height - 120,
-            "收纳盒",
+            "放这里 💕",
             { fontSize: "20px", color: "#ff69b4" }
         ).setOrigin(0.5);
 
@@ -111,14 +114,14 @@ export class GameScene extends Phaser.Scene {
             let x = Phaser.Math.Between(80, width - 80);
             let y = Phaser.Math.Between(150, height - 300);
 
-            let item = this.createItem(x, y, type, color);
+            let item = this.createCuteItem(x, y, type, color);
             item.itemType = type;
             item.itemColor = color;
 
             items.push(item);
         }
 
-        // 如果没有符合规则的，强制一个
+        // 防止无可放物品卡关
         if (targetCount === 0) {
             items[0].itemType = ruleValue;
             targetCount = 1;
@@ -134,13 +137,9 @@ export class GameScene extends Phaser.Scene {
 
             if (!obj.itemType) return;
 
-            let correct = false;
-
-            if (ruleType === "color") {
-                correct = obj.itemColor === ruleValue;
-            } else {
-                correct = obj.itemType === ruleValue;
-            }
+            let correct = ruleType === "color"
+                ? obj.itemColor === ruleValue
+                : obj.itemType === ruleValue;
 
             let inBox = Phaser.Geom.Rectangle.Contains(
                 target.getBounds(),
@@ -153,14 +152,15 @@ export class GameScene extends Phaser.Scene {
                 obj.disableInteractive();
                 placed++;
 
+                this.tweens.add({
+                    targets: obj,
+                    scale: 0.5,
+                    alpha: 0,
+                    duration: 300
+                });
+
                 if (placed >= targetCount) {
-
-                    save.currentLevel++;
-                    localStorage.setItem("cuteSave", JSON.stringify(save));
-
-                    this.time.delayedCall(800, () => {
-                        this.scene.restart();
-                    });
+                    this.showNextPopup(save);
                 }
 
             } else {
@@ -169,8 +169,7 @@ export class GameScene extends Phaser.Scene {
                 obj.y = Phaser.Math.Between(150, height - 300);
             }
         });
-
-        //// ===== 教学提示 =====
+// ===== 教学 =====
         if (!save.tutorialShown) {
 
             const overlay = this.add.rectangle(
@@ -187,7 +186,7 @@ export class GameScene extends Phaser.Scene {
 
             const tip = this.add.text(
                 width/2, height/2,
-                "拖动符合规则的物品\n放入收纳盒即可过关\n\n点击关闭",
+                "拖动符合规则的物品\n放入下方区域即可过关\n\n点击关闭",
                 { fontSize: "18px", color: "#ff69b4", align: "center" }
             ).setOrigin(0.5).setDepth(5002);
 
@@ -203,7 +202,8 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    createItem(x, y, type, color) {
+    // ===== 可区分类型的可爱物品 =====
+    createCuteItem(x, y, type, color) {
 
         const container = this.add.container(x, y);
         const g = this.add.graphics();
@@ -214,15 +214,90 @@ export class GameScene extends Phaser.Scene {
             yellow: 0xfff3a6
         };
 
-        g.fillStyle(colorMap[color], 1);
-        g.fillCircle(0, 0, 35);
+        const fillColor = colorMap[color];
+
+        // 白底
+        g.fillStyle(0xffffff, 1);
+        g.fillCircle(0, 0, 42);
+
+        // 彩色边
+        g.lineStyle(4, fillColor);
+        g.strokeCircle(0, 0, 42);
+
+        g.fillStyle(fillColor, 1);
+
+        if (type === "toy") {
+            g.fillCircle(0, 5, 22);
+            g.fillCircle(-18, -12, 10);
+            g.fillCircle(18, -12, 10);
+        }
+        else if (type === "food") {
+            g.fillRoundedRect(-22, -5, 44, 25, 8);
+            g.fillCircle(0, -20, 15);
+        }
+        else if (type === "clothes") {
+            g.fillTriangle(-25, -10, 25, -10, 0, 30);
+            g.fillRect(-15, -25, 30, 15);
+        }
 
         container.add(g);
-        container.setSize(70, 70);
+
+        container.setSize(90, 90);
         container.setInteractive({ draggable: true });
         this.input.setDraggable(container);
 
+        this.tweens.add({
+            targets: container,
+            scale: 1.06,
+            duration: 900,
+            yoyo: true,
+            repeat: -1
+        });
+
         return container;
     }
+
+    // ===== 下一关弹窗 =====
+    showNextPopup(save) {
+
+        const { width, height } = this.scale;
+
+        const overlay = this.add.rectangle(
+            width/2, height/2,
+            width, height,
+            0x000000, 0.5
+        ).setDepth(4000);
+
+        const box = this.add.rectangle(
+            width/2, height/2,
+            280, 180,
+            0xffffff
+        ).setStrokeStyle(4, 0xff69b4)
+         .setDepth(4001)
+         .setScale(0);
+
+        this.tweens.add({
+            targets: box,
+            scale: 1,
+            duration: 300,
+            ease: "Back.Out"
+        });
+
+        this.add.text(width/2, height/2 - 30,
+            "✨ 太棒啦！",
+            { fontSize: "24px", color: "#ff69b4" }
+        ).setOrigin(0.5).setDepth(4002);
+
+        this.add.text(width/2, height/2 + 20,
+            "进入下一关...",
+            { fontSize: "18px", color: "#666" }
+        ).setOrigin(0.5).setDepth(4002);
+
+        save.currentLevel++;
+        localStorage.setItem("cuteSave", JSON.stringify(save));
+
+        this.time.delayedCall(1200, () => {
+            this.scene.restart();
+        });
+    }
 }
-   
