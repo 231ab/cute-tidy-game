@@ -175,79 +175,99 @@ restartBg.on("pointerdown", () => {
             gameObject.y = dragY;
         });
 
-        this.input.on("dragend", (pointer, gameObject) => {
+       this.input.on("dragend", (pointer, gameObject) => {
 
-            if (!gameObject.input || !gameObject.input.enabled) return;
+    if (!gameObject.input || !gameObject.input.enabled) return;
 
-            let correct = false;
+    let correct = false;
 
-            if (config.ruleType === "color") {
-                correct = (gameObject.itemColor === config.ruleValue);
-            } else {
-                correct = (gameObject.itemType === config.ruleValue);
-            }
+    // ===== 判断是否符合规则 =====
+    if (config.ruleType === "color") {
+        correct = (gameObject.itemColor === config.ruleValue);
+    } else {
+        correct = (gameObject.itemType === config.ruleValue);
+    }
 
-            let inBox = Phaser.Geom.Rectangle.Contains(
-                target.getBounds(),
-                gameObject.x,
-                gameObject.y
-            );
+    let inBox = Phaser.Geom.Rectangle.Contains(
+        target.getBounds(),
+        gameObject.x,
+        gameObject.y
+    );
 
-            if (inBox && correct) {
+    if (inBox && correct) {
 
-                gameObject.disableInteractive();
+        // ✅ 正确放置
+        gameObject.disableInteractive();
 
-                this.tweens.add({
-                    targets: gameObject,
-                    x: width/2,
-                    y: height - 150 + Phaser.Math.Between(-30, 30),
-                    scale: 0.6,
-                    duration: 200
-                });
-
-                placed++;
-
-                if (placed >= targetCount) {
-
-                    save.currentLevel++;
-                    localStorage.setItem("cuteSave", JSON.stringify(save));
-
-                    this.time.delayedCall(800, () => {
-                        this.scene.restart();
-                    });
-                }
-
-            } else {
-
-                this.tweens.add({
-                    targets: gameObject,
-                    x: Phaser.Math.Between(80, width - 80),
-                    y: Phaser.Math.Between(150, height - 300),
-                    duration: 300
-                });
-            }
+        this.tweens.add({
+            targets: gameObject,
+            x: width / 2,
+            y: height - 150 + Phaser.Math.Between(-30, 30),
+            scale: 0.6,
+            duration: 200
         });
 
-        // ===== 时间限制 =====
-        if (timeLimit > 0) {
+        placed++;
 
-            this.time.addEvent({
-                delay: 1000,
-                loop: true,
-                callback: () => {
+        if (placed >= targetCount) {
 
-                    let timeUsed = Math.floor((Date.now() - startTime) / 1000);
-                    let left = timeLimit - timeUsed;
+            save.currentLevel++;
+            localStorage.setItem("cuteSave", JSON.stringify(save));
 
-                    timerText.setText("剩余: " + left);
-
-                    if (left <= 0) {
-                        this.scene.restart();
-                    }
-                }
+            this.time.delayedCall(800, () => {
+                this.scene.restart();
             });
         }
+
+    } else {
+
+        // ❌ 放错 —— 扣时间 2 秒
+        if (timeLimit > 0) {
+            startTime += 2000; // 时间流逝加快2秒
+        this.cameras.main.flash(200, 255, 100, 100);
+        }
+
+        this.tweens.add({
+            targets: gameObject,
+            x: Phaser.Math.Between(80, width - 80),
+            y: Phaser.Math.Between(150, height - 300),
+            duration: 300
+        });
+        
     }
+}); 
+
+        // ===== 时间限制 =====
+        // ===== 时间系统 =====
+
+let currentTime = timeLimit > 0 ? timeLimit : 999;  // 无限制关卡给大值
+
+let timerText = this.add.text(width - 20, 40, "", {
+    fontSize: "20px",
+    color: "#FF1493"
+})
+.setOrigin(1, 0.5)
+.setDepth(1500);   // 确保在上层
+
+timerText.setText("剩余: " + (timeLimit > 0 ? currentTime : "∞"));
+
+if (timeLimit > 0) {
+
+    this.time.addEvent({
+        delay: 1000,
+        loop: true,
+        callback: () => {
+
+            currentTime--;
+
+            timerText.setText("剩余: " + currentTime);
+
+            if (currentTime <= 0) {
+                this.scene.restart();
+            }
+        }
+    });
+}
 
     // ===== 可爱物品绘制 =====
     createCuteItem(x, y, type, color) {
