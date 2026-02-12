@@ -97,17 +97,24 @@ export class GameScene extends Phaser.Scene {
             color: "#ffffff"
         }).setOrigin(0.5);
 
-        // ===== 重开按钮 =====
-        let restartBtn = this.add.text(width - 60, height - 40, "重开", {
-            fontSize: "18px",
-            backgroundColor: "#FF69B4",
-            color: "#ffffff",
-            padding: { x: 10, y: 5 }
-        }).setOrigin(0.5).setInteractive();
+        // ===== 重开按钮（固定右上角，最高层级） =====
 
-        restartBtn.on("pointerdown", () => {
-            this.scene.restart();
-        });
+let restartBg = this.add.rectangle(width - 70, 80, 100, 40, 0xFF69B4)
+    .setOrigin(0.5)
+    .setDepth(999);  // 强制最上层
+
+let restartText = this.add.text(width - 70, 80, "重开", {
+    fontSize: "18px",
+    color: "#ffffff"
+})
+.setOrigin(0.5)
+.setDepth(1000);
+
+restartBg.setInteractive();
+
+restartBg.on("pointerdown", () => {
+    this.scene.restart();
+});
 
         // ===== 生成物品 =====
 
