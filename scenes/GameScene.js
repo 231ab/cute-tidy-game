@@ -52,7 +52,7 @@ export class GameScene extends Phaser.Scene {
             ruleText = "请整理类型为：" + config.ruleValue;
         }
 
-        this.add.text(width/2, 80, ruleText, {
+        this.add.text(width/2, 110, ruleText, {
             fontSize: "18px",
             color: "#FF1493"
         }).setOrigin(0.5);
@@ -60,27 +60,42 @@ export class GameScene extends Phaser.Scene {
         // ===== 首次教学提示 =====
         if (!save.tutorialShown) {
 
-            let bg = this.add.rectangle(width/2, height/2, 320, 200, 0xffffff)
-                .setStrokeStyle(3, 0xFF69B4);
+    // 半透明遮罩（锁住底层）
+    let overlay = this.add.rectangle(width/2, height/2, width, height, 0x000000, 0.5)
+        .setDepth(1999);
 
-            let tip = this.add.text(width/2, height/2,
-                "拖动符合规则的物品\n到下方整理盒即可过关",
-                {
-                    fontSize: "18px",
-                    color: "#FF1493",
-                    align: "center"
-                }
-            ).setOrigin(0.5);
+    let bg = this.add.rectangle(width/2, height/2, 320, 220, 0xffffff)
+        .setStrokeStyle(4, 0xFF69B4)
+        .setDepth(2000);
 
-            bg.setInteractive();
-            bg.on("pointerdown", () => {
-                bg.destroy();
-                tip.destroy();
-            });
-
-            save.tutorialShown = true;
-            localStorage.setItem("cuteSave", JSON.stringify(save));
+    let tip = this.add.text(width/2, height/2,
+        "拖动符合规则的物品\n到下方整理盒即可过关\n\n点击关闭",
+        {
+            fontSize: "18px",
+            color: "#FF1493",
+            align: "center"
         }
+    )
+    .setOrigin(0.5)
+    .setDepth(2001);
+
+    // 让整个弹窗可点击关闭
+    overlay.setInteractive();
+    bg.setInteractive();
+
+    overlay.on("pointerdown", closeTutorial);
+    bg.on("pointerdown", closeTutorial);
+
+    function closeTutorial() {
+        overlay.destroy();
+        bg.destroy();
+        tip.destroy();
+    }
+
+    save.tutorialShown = true;
+    localStorage.setItem("cuteSave", JSON.stringify(save));
+        }
+
 
         // ===== 计时器 =====
         let timerText = this.add.text(width - 20, 40, "", {
@@ -97,18 +112,17 @@ export class GameScene extends Phaser.Scene {
             color: "#ffffff"
         }).setOrigin(0.5);
 
-        // ===== 重开按钮（固定右上角，最高层级） =====
+        // ===== 重开按钮（右上角小圆按钮） =====
 
-let restartBg = this.add.rectangle(width - 70, 80, 100, 40, 0xFF69B4)
-    .setOrigin(0.5)
-    .setDepth(999);  // 强制最上层
+let restartBg = this.add.circle(width - 35, 35, 25, 0xFF69B4)
+    .setDepth(1000);
 
-let restartText = this.add.text(width - 70, 80, "重开", {
-    fontSize: "18px",
+let restartText = this.add.text(width - 35, 35, "↺", {
+    fontSize: "22px",
     color: "#ffffff"
 })
 .setOrigin(0.5)
-.setDepth(1000);
+.setDepth(1001);
 
 restartBg.setInteractive();
 
